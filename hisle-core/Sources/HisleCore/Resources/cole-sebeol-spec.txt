@@ -1,0 +1,738 @@
+# Cole Sebeol Keyboard Specification
+#
+# Provenance
+#   The key rows in this file are an independent transcription of the Gong
+#   Byung-woo Sebeolsik Final layout into Hisle's own specification format.
+#   The libhangul project was consulted for Unicode Hangul values, Sebeolsik
+#   layout data, and behavior comparison, but this file does not vendor
+#   libhangul XML data. See the repository-level NOTICE for attribution notes.
+#
+# Purpose
+#   Reference data for Hisle's Cole Sebeol layout.
+#   Cole Sebeol uses the Gong Byung-woo Sebeolsik Final key map on standard US
+#   QWERTY representative key positions. Colemak is the underlying Roman layout
+#   for shortcut forwarding and Roman-mode behavior; it is not used to derive
+#   Hangul jamo assignments.
+#
+# Cole Sebeol policy
+#   - Hangul jamo assignments are derived from the Sebeolsik Final layout on
+#     representative QWERTY key positions.
+#   - This specification names physical key positions with 대표 글쇠
+#     (representative keys): standard US QWERTY key labels. Representative keys
+#     are intentionally separate from Colemak underlying Roman letters. For
+#     example, representative keys j k f name physical J, K, F; if written as
+#     Colemak underlying letters, the same sequence would be n e t.
+#   - The underlying Roman layout is Colemak, not QWERTY. The complete
+#     representative-QWERTY to Colemak mapping is listed in underlying-key rows
+#     below. This mapping is used for shortcut forwarding and Roman-mode text,
+#     not for Hangul jamo assignment.
+#   - "Underlying Roman layout" means modifier shortcuts are interpreted and
+#     forwarded as Colemak Roman shortcuts while Hangul input is active. Host
+#     applications receive Command/Control chords such as Command+C or
+#     Command+V as Roman shortcut events, never as Hangul jamo. For letters that
+#     differ between QWERTY and Colemak, the Colemak letter is authoritative.
+#     For example, the physical key that QWERTY labels E is Colemak F, so
+#     Command plus that key should be delivered as Command+F.
+#   - Hangul jamo assignments and policy examples are written against
+#     representative keys. Modifier shortcut behavior still follows the
+#     Colemak underlying Roman layout.
+#
+# sane-punctuation policy
+#   - This policy is named sane-punctuation.
+#   - Cole Sebeol Hangul mode keeps Hangul Jamo key rows as composition input,
+#     but printable non-jamo output follows the sane-punctuation table
+#     below instead of the Sebeolsik Final symbol layer.
+#   - sane-punctuation is separate from the underlying Roman layout. The
+#     underlying Roman layout still controls shortcut forwarding and Roman-mode
+#     text. sane-punctuation controls Hangul-mode printable scalar output.
+#   - A non-jamo key row still uses FlushThenEmit: first flush any active
+#     composition, then emit the printable scalar from the key row.
+#   - The policy table is written in representative-key notation. The last
+#     row's middle key is representative n; its Colemak underlying key is k.
+#     If a UI labels keys by the underlying Roman layout, that same physical
+#     row may appear as b k m , . /.
+#   - The sane-punctuation table is:
+#       representative keys:
+#         `1234567890-=
+#         []\
+#         ;'
+#         b n m , . /
+#       unshifted output:
+#         `ㅎㅆㅂㅛㅠㅑㅖㅢㅜㅋ-=
+#         []\
+#         ㅂㅌ
+#         ㅜ ㅅ ㅎ , . ㅗ
+#       shifted output:
+#         ~ㄲㄺㅈㄿㄾ^&*()_+
+#         {}|
+#         4"
+#         ? : ; < > !
+#
+# 초성 선행 모아치기 정책
+#   - This policy is named 초성 선행 모아치기 정책.
+#   - Cole Sebeol does not support full 모아치기.
+#   - A syllable must resolve its choseong first. A jungseong or jongseong typed
+#     before the choseong is not held for a later choseong and must not be
+#     retroactively folded into that later syllable.
+#   - After the choseong is resolved, the syllable may accept its jungseong and
+#     jongseong in either order. For example, choseong-jungseong-jongseong and
+#     choseong-jongseong-jungseong are equivalent when the same jamo are used.
+#   - This is the only supported 모아치기 behavior: the engine may reorder a
+#     post-choseong jungseong and jongseong inside the active syllable, but it
+#     must not reorder a choseong behind an already typed jungseong or jongseong.
+#   - If a second choseong arrives while a choseong-only syllable is active, the
+#     existing choseong may combine through the table below when a choseong
+#     combination exists. Otherwise, the previous choseong is flushed and the
+#     new choseong starts the next syllable.
+#   - The choseong-combination state closes deterministically as soon as a
+#     jungseong or jongseong arrives. A later choseong must not be combined with
+#     a choseong that is already followed by a jungseong or jongseong.
+#   - If another choseong arrives after the active syllable has a jungseong or
+#     jongseong, the active syllable is flushed and the new choseong starts the
+#     next syllable.
+#   - Test coverage for this policy must include both accepted and rejected
+#     orderings:
+#       k f x -> 각
+#       k x f -> 각
+#       x k f -> ㄱ가
+#       f k x -> ㅏㄱㄱ
+#
+# slash-nine(/9) 정책
+#   - This policy is named slash-nine(/9) 정책.
+#   - slash-nine(/9) 정책 means the representative / key's ㅗ and the
+#     representative 9 key's ㅜ are source-key-special vowels. The name refers
+#     to the / and 9 representative key positions, not to the v and b
+#     representative key positions that carry the same Unicode jamo scalars.
+#   - This policy exists for crying expressions that use repeated ㅜ. For
+#     example, 망했어ㅜㅜ must stay 망했어ㅜㅜ; typing representative b-key ㅜ
+#     after the ㅓ in 어 must not fold that ㅓ+ㅜ into ㅝ and produce 망했워ㅜ.
+#   - The two representative ㅗ keys and two representative ㅜ keys share Unicode
+#     jamo scalars, but they do not have identical composition behavior. The
+#     automata must retain the source key for U+1169 and U+116E instead of
+#     reducing input to a jamo scalar only.
+#   - The representative / key's U+1169 and representative 9 key's U+116E may
+#     appear either before or after the matching base jungseong:
+#       / f, f / -> U+116A  # ㅗ + ㅏ, ㅏ + ㅗ -> ㅘ
+#       / r, r / -> U+116B  # ㅗ + ㅐ, ㅐ + ㅗ -> ㅙ
+#       / d, d / -> U+116C  # ㅗ + ㅣ, ㅣ + ㅗ -> ㅚ
+#       9 t, t 9 -> U+116F  # ㅜ + ㅓ, ㅓ + ㅜ -> ㅝ
+#       9 c, c 9 -> U+1170  # ㅜ + ㅔ, ㅔ + ㅜ -> ㅞ
+#       9 d, d 9 -> U+1171  # ㅜ + ㅣ, ㅣ + ㅜ -> ㅟ
+#   - The representative v key's U+1169 and representative b key's U+116E may
+#     produce compound vowels only when they are the first source key:
+#       v f -> U+116A  # ㅗ + ㅏ -> ㅘ
+#       v r -> U+116B  # ㅗ + ㅐ -> ㅙ
+#       v d -> U+116C  # ㅗ + ㅣ -> ㅚ
+#       b t -> U+116F  # ㅜ + ㅓ -> ㅝ
+#       b c -> U+1170  # ㅜ + ㅔ -> ㅞ
+#       b d -> U+1171  # ㅜ + ㅣ -> ㅟ
+#   - The reverse representative source-key orders f v, r v, d v, t b, c b,
+#     and d b must not combine. They remain standalone vowel sequences ㅏㅗ,
+#     ㅐㅗ, ㅣㅗ, ㅓㅜ, ㅔㅜ, and ㅣㅜ.
+#   - The source-combine rows below are authoritative for all slash-nine(/9)
+#     and v/b compound vowels. Do not add generic scalar-only combine rows such
+#     as U+1169+U+1175 or U+116E+U+1175 for these source-sensitive vowels; those
+#     rows would make d v and d b combine incorrectly.
+#   - Test coverage for this policy must include both accepted and rejected
+#     source-key orderings:
+#       / f, f /, v f -> ㅘ; f v -> ㅏㅗ
+#       / r, r /, v r -> ㅙ; r v -> ㅐㅗ
+#       / d, d /, v d -> ㅚ; d v -> ㅣㅗ
+#       9 t, t 9, b t -> ㅝ; t b -> ㅓㅜ
+#       9 c, c 9, b c -> ㅞ; c b -> ㅔㅜ
+#       9 d, d 9, b d -> ㅟ; d b -> ㅣㅜ
+#
+# 약한 아래 정책
+#   - This policy is named 약한 아래 정책.
+#   - 약한 아래 정책 keeps the Sebeolsik Final-derived layout while taking part
+#     of 순아래's no-shift advantage. It is intentionally weaker than 순아래:
+#     only the explicit pairs in this section are added.
+#   - 약한 아래 정책 does not logically require 초성 선행 모아치기 정책, but
+#     초성 선행 모아치기 정책 provides the boundary that makes 약한 아래 stable
+#     in this sequential automata. In particular, weak-below choseong pairs are
+#     applied while resolving the initial consonant position, not by reordering a
+#     late choseong behind already typed jungseong or jongseong.
+#   - Therefore, j k f becomes 까, but j f k becomes 아ㄱ. The f jungseong closes
+#     the choseong-combination state after j, so the later k cannot combine with
+#     that j to make ㄲ.
+#   - The order of each pair does not matter. For example, choseong ieung plus
+#     choseong kiyeok and choseong kiyeok plus choseong ieung both produce
+#     choseong ssangkiyeok.
+#   - Same-jamo choseong repetition does not trigger these tense consonants. In
+#     particular, 초성 ㄱ+ㄱ, ㅈ+ㅈ, ㅂ+ㅂ, ㄷ+ㄷ, and ㅅ+ㅅ must stay as two
+#     adjacent jamo positions instead of becoming 초성 ㄲ, ㅉ, ㅃ, ㄸ, or ㅆ.
+#     Jongseong same-jamo combinations such as 종성 ㄱ+ㄱ -> 종성 ㄲ and
+#     종성 ㅅ+ㅅ -> 종성 ㅆ are still allowed.
+#   - The 약한 아래 pairs are:
+#       choseong ieung + choseong kiyeok -> choseong ssangkiyeok
+#       choseong kiyeok + choseong cieuc -> choseong ssangcieuc
+#       choseong cieuc + choseong pieup -> choseong ssangpieup
+#       choseong tikeut + choseong mieum -> choseong ssangtikeut
+#       choseong sios + choseong hieuh -> choseong ssangsios
+#       jungseong i + jungseong a -> jungseong yae
+#       jungseong a + jungseong i -> jungseong yae
+#       jungseong i + jungseong eu -> jungseong yi
+#       jungseong yeo + jungseong ae -> jungseong ye
+#       jungseong ae + jungseong yeo -> jungseong ye
+#       jongseong ieung + jongseong nieun -> jongseong nieun-hieuh
+#       jongseong sios + jongseong rieul -> jongseong pieup-sios
+#       jongseong pieup + jongseong ssangsios -> jongseong cieuc
+#       jongseong hieuh + jongseong ssangsios -> jongseong ssangkiyeok
+#   - Test coverage for this policy must include both directions for each pair
+#     and rejected same-jamo repetitions:
+#       j k f -> 까
+#       k j f -> 까
+#       j f k -> 아ㄱ
+#       k k f -> ㄱ가
+#       k l f -> 짜
+#       l k f -> 짜
+#       l l f -> ㅈ자
+#       l ; f -> 빠
+#       ; l f -> 빠
+#       ; ; f -> ㅂ바
+#       u i f -> 따
+#       i u f -> 따
+#       u u f -> ㄷ다
+#       n m f -> 싸
+#       m n f -> 싸
+#       n n f -> ㅅ사
+#       d f -> ㅒ
+#       f d -> ㅒ
+#       d g -> ㅢ
+#       g d -> ㅢ
+#       k d f -> 걔
+#       k f d -> 걔
+#       k d g -> 긔
+#       k g d -> 긔
+#       k e r -> 계
+#       k r e -> 계
+#       k f a s -> 갆
+#       k f s a -> 갆
+#       k f q w -> 값
+#       k f w q -> 값
+#       k f 3 2 -> 갖
+#       k f 2 3 -> 갖
+#       k f 1 2 -> 갂
+#       k f 2 1 -> 갂
+#
+# Standalone jamo flush policy
+#   - The automata uses Unicode Hangul Jamo scalars internally for composition.
+#   - When an incomplete syllable must be flushed, visible standalone jamo are
+#     emitted as Hangul Compatibility Jamo. This produces user-facing text such
+#     as 아ㄱ instead of exposing conjoining jamo scalars.
+#   - Compatibility conversion is defined by compat-jamo rows below. Implementers
+#     must use those rows for standalone choseong, jungseong, and jongseong.
+#   - Incomplete jamo are flushed in input order.
+#   - Examples after an explicit Flush or an implicit flush boundary:
+#       j f k -> 아ㄱ
+#       x k f -> ㄱ가
+#       f k x -> ㅏㄱㄱ
+#       k x . -> ㄱㄱ.
+#
+# Second jungseong/jongseong and no-choseong policy
+#   - If a new jungseong arrives while the active composition already has a
+#     jungseong, the automata first tries the slot-scoped jungseong combination
+#     rules, including positional-combine and source-combine rows.
+#   - If that new jungseong cannot combine with the active jungseong, flush the
+#     previous active composition and start a new no-choseong composition with
+#     the new jungseong.
+#   - If a new jungseong arrives while the active composition already has a
+#     choseong, jungseong, and jongseong, flush the previous active syllable and
+#     start a new no-choseong composition with the new jungseong. The previous
+#     jongseong is not stolen as the choseong of the new syllable.
+#   - If a new jongseong arrives while the active composition already has a
+#     jongseong, the automata first tries the slot-scoped jongseong combination
+#     rules.
+#   - If that new jongseong cannot combine with the active jongseong, flush the
+#     previous active composition and start a new no-choseong composition with
+#     the new jongseong.
+#   - A no-choseong composition may contain a jungseong-only stack or a
+#     jongseong-only stack. Same-slot combinations are allowed when the normal
+#     slot-scoped rules allow them, but the result remains no-choseong and must
+#     flush as Compatibility Jamo.
+#   - markedText for a no-choseong composition uses the same Compatibility Jamo
+#     conversion as Flush.
+#   - A no-choseong composition must not retroactively attach to a later
+#     choseong. A later choseong is a partial composition boundary that flushes
+#     the no-choseong composition first.
+#   - A no-choseong composition cannot mix jungseong and jongseong into a
+#     syllable. If a different slot arrives, flush the previous no-choseong
+#     composition and start a new no-choseong composition with the new jamo.
+#   - Test coverage for this policy must include:
+#       k f r Flush -> 가ㅐ
+#       k f x z Flush -> 각ㅁ
+#       k x q f Flush -> 갃
+#       k x z Flush -> ㄱㄱㅁ
+#       / f Flush -> ㅘ
+#       f / Flush -> ㅘ
+#       x q Flush -> ㄳ
+#       f r Flush -> ㅏㅐ
+#       f x Flush -> ㅏㄱ
+#       x f Flush -> ㄱㅏ
+#       / f k f Flush -> ㅘ가
+#       f / k f Flush -> ㅘ가
+#       k f x f Flush -> 각ㅏ
+#       k f x / Flush -> 각ㅗ
+#       k x f / Flush -> 각ㅗ
+#
+# Automata input/output and test policy
+#   - Policy examples such as k f x -> 각 mean: process the listed
+#     representative printable keys in order, then explicitly Flush any active
+#     composition at the end of the test.
+#   - The core automata output model is fixed as:
+#       committedText: newly visible text emitted by the processed input.
+#       markedText: the active composition's current visible form after the
+#         processed input, or the empty string when no composition is active.
+#       forwardedActions: host actions that must be forwarded after any required
+#         flush, such as system Backspace, system Delete, or a command/control
+#         shortcut.
+#   - Test fixtures should represent forwardedActions with explicit values:
+#       ForwardDelete
+#       ForwardBackspace
+#       ForwardShortcut(modifiers: [Command|Control|Option|Shift...],
+#         key: <underlying ASCII scalar>)
+#     Shortcut test input is written as Command(<representative-key>) or
+#     Control(<representative-key>). The forwarded shortcut key is the Colemak
+#     underlying scalar from the underlying-key rows. For example:
+#       k f Command(e) -> committedText "가",
+#         forwardedActions [ForwardShortcut([Command], "f")]
+#       Command(n) -> forwardedActions [ForwardShortcut([Command], "k")]
+#   - Tests may accumulate committedText across inputs as visible text. The
+#     engine stores markedText separately; markedText is not counted as committed
+#     visible text until Flush or a FlushThen* boundary emits it.
+#   - End-to-end examples in this document assert the final visible text after
+#     the trailing explicit Flush. Boundary examples may also assert
+#     forwardedActions.
+#   - Printable representative keys update the active composition or flushed text
+#     according to the composition policies in this document.
+#   - Flush emits the active composition as visible text and clears the
+#     composition state. Flush emits no extra scalar.
+#   - FlushThenEmit means Flush first, then emit a printable scalar such as
+#     whitespace or a non-jamo scalar from the key rows. Whitespace and key rows
+#     whose values are not Hangul Jamo use FlushThenEmit. Under
+#     sane-punctuation, non-jamo key rows contain the intended Hangul-mode
+#     printable scalar, not the Sebeolsik Final symbol-layer scalar.
+#     In the output model, committedText contains the flushed composition
+#     followed by the printable scalar in that order.
+#   - FlushThenForward means Flush first, then forward a non-text host action.
+#     Command/control shortcuts use FlushThenForward according to the Colemak
+#     underlying Roman layout. In the output model, committedText contains the
+#     flushed composition and forwardedActions contains the host action.
+#   - Clear clears any active composition without flushing it. Clear is reserved
+#     for rare internal recovery or explicit tests; normal user paths should use
+#     Flush or a FlushThen* boundary.
+#   - Delete means forward delete. If composition is active, use
+#     FlushThenForward(Delete). If no composition is active, let the host system
+#     perform Delete without core text output.
+#   - Backspace means delete backward. If composition is active, remove the last
+#     representative printable key from the active composition stack and
+#     recompute the active marked text. If no composition is active, let the host
+#     system perform Backspace without core text output.
+#   - Backspace never removes text that the automata has already flushed. For
+#     example, after k f k, the second k is the active composition and 가 is
+#     already flushed; Backspace removes only the active k.
+#   - Incremental markedText tests should include:
+#       k -> committedText "", markedText "ㄱ"
+#       k x -> committedText "", markedText "ㄱㄱ"
+#       k f -> committedText "", markedText "가"
+#       k x f -> committedText "", markedText "각"
+#       / f -> committedText "", markedText "ㅘ"
+#       f / -> committedText "", markedText "ㅘ"
+#       k f x f -> committedText "각", markedText "ㅏ"
+#   - Test coverage for editing boundaries should include:
+#       k f Backspace Flush -> ㄱ
+#       k x Backspace f Flush -> 가
+#       k f Delete -> 가 + ForwardDelete
+#       k x Delete -> ㄱㄱ + ForwardDelete
+#       Delete -> ForwardDelete
+#       Backspace -> ForwardBackspace
+#
+# Partial composition boundary policy
+#   - A pending choseong-jongseong sequence may wait only for a jungseong that
+#     would complete the active syllable under 초성 선행 모아치기 정책.
+#   - If a non-jungseong flush boundary arrives while only choseong and
+#     jongseong are pending, the pending jamo are flushed as standalone
+#     compatibility jamo in input order, and then the boundary input is
+#     processed.
+#   - Boundary inputs include a new choseong, non-jamo printable output,
+#     whitespace, explicit Flush, Delete, and command/control shortcuts. Clear
+#     is a clearing boundary: it clears the pending jamo without flushing them.
+#   - Examples:
+#       k x f -> 각
+#       k x k -> ㄱㄱㄱ
+#       k x . -> ㄱㄱ.
+#       k x Space -> ㄱㄱ Space
+#
+# Important compatibility note:
+#   In the original Sebeolsik Final behavior, left-side ㅗ and ㅜ should not
+#   combine with other vowels. Hisle's Cole Sebeol automata intentionally uses
+#   source-key-specific rows: / and 9 may combine on either side of their base
+#   vowels, while v and b combine only when they come first.
+#   약한 아래 정책 intentionally omits same-jamo choseong tense combinations,
+#   and some order-insensitive weak-below pairs replace default final-consonant
+#   combinations.
+#
+# Format
+#   keyboard <id> <name> type=<type> map=<map-id> combination=<combination-id>
+#   underlying-key <keyboard-id> <representative-ascii-code> <underlying-ascii-code>
+#   key <keyboard-id> <representative-ascii-code> <unicode-scalar> # <key-label> -> <output>
+#   compat-jamo <hangul-jamo-scalar> <compatibility-jamo-scalar>
+#   combine <combination-id> <first> <second> <result>
+#   positional-combine <combination-id> <first> <representative-ascii-code> <second> <result>
+#   source-combine <combination-id> <first-source-key> <second-source-key> <result>
+#
+# Notes
+#   - representative-ascii-code is the ASCII scalar for the representative key
+#     label. It identifies a standard US QWERTY physical key position, not the
+#     Colemak post-layout Roman scalar.
+#   - underlying-key rows define the full standard US QWERTY representative key
+#     to Colemak scalar mapping used for command/control shortcut forwarding.
+#     Printable Hangul-mode key rows do not use this mapping.
+#   - Uppercase letters and shifted punctuation are represented by their ASCII
+#     scalars.
+#   - Hangul values use Unicode Hangul Jamo scalars:
+#       U+1100..U+115F choseong, U+1160..U+11A7 jungseong,
+#       U+11A8..U+11FF jongseong.
+#   - Non-jamo key values are printable scalars from the sane-punctuation table.
+#     They use FlushThenEmit.
+#   - compat-jamo rows define standalone flush output for internal Unicode
+#     Hangul Jamo. When a composed standalone jamo such as U+116A or U+11AA
+#     flushes, use its compat-jamo row.
+#   - Policy examples such as k f x, j k f, v f, and b t use
+#     representative-key source labels. They describe the intended key-position
+#     order in the automata policy, not Colemak letters and not a global scalar
+#     rewrite rule.
+#   - combine rows are slot-scoped. They are not global scalar rewrites.
+#     Choseong-result rows apply only while resolving the choseong position,
+#     jungseong-result rows apply only while resolving the jungseong position,
+#     and jongseong-result rows apply only while resolving the jongseong
+#     position.
+#   - positional-combine applies only when <second> comes from
+#     <representative-ascii-code>.
+#     Generic jamo-scalar equality is not enough for these cases.
+#   - source-combine applies only to the exact two representative-key source
+#     labels listed. It is used when the source key identity matters for both
+#     sides.
+#   - For slash-nine(/9) and v/b compound vowels, source-combine rows are the
+#     complete contract. Absence of a source-combine row is intentional and means
+#     the same Unicode jamo scalars must remain separate for that source-key
+#     order.
+
+keyboard cole-sebeol "Cole Sebeol" type=jaso map=0 combination=default
+underlying-key cole-sebeol 0x60 0x60 # ` -> `
+underlying-key cole-sebeol 0x31 0x31 # 1 -> 1
+underlying-key cole-sebeol 0x32 0x32 # 2 -> 2
+underlying-key cole-sebeol 0x33 0x33 # 3 -> 3
+underlying-key cole-sebeol 0x34 0x34 # 4 -> 4
+underlying-key cole-sebeol 0x35 0x35 # 5 -> 5
+underlying-key cole-sebeol 0x36 0x36 # 6 -> 6
+underlying-key cole-sebeol 0x37 0x37 # 7 -> 7
+underlying-key cole-sebeol 0x38 0x38 # 8 -> 8
+underlying-key cole-sebeol 0x39 0x39 # 9 -> 9
+underlying-key cole-sebeol 0x30 0x30 # 0 -> 0
+underlying-key cole-sebeol 0x2D 0x2D # - -> -
+underlying-key cole-sebeol 0x3D 0x3D # = -> =
+underlying-key cole-sebeol 0x71 0x71 # q -> q
+underlying-key cole-sebeol 0x77 0x77 # w -> w
+underlying-key cole-sebeol 0x65 0x66 # e -> f
+underlying-key cole-sebeol 0x72 0x70 # r -> p
+underlying-key cole-sebeol 0x74 0x67 # t -> g
+underlying-key cole-sebeol 0x79 0x6A # y -> j
+underlying-key cole-sebeol 0x75 0x6C # u -> l
+underlying-key cole-sebeol 0x69 0x75 # i -> u
+underlying-key cole-sebeol 0x6F 0x79 # o -> y
+underlying-key cole-sebeol 0x70 0x3B # p -> ;
+underlying-key cole-sebeol 0x5B 0x5B # [ -> [
+underlying-key cole-sebeol 0x5D 0x5D # ] -> ]
+underlying-key cole-sebeol 0x5C 0x5C # \ -> \
+underlying-key cole-sebeol 0x61 0x61 # a -> a
+underlying-key cole-sebeol 0x73 0x72 # s -> r
+underlying-key cole-sebeol 0x64 0x73 # d -> s
+underlying-key cole-sebeol 0x66 0x74 # f -> t
+underlying-key cole-sebeol 0x67 0x64 # g -> d
+underlying-key cole-sebeol 0x68 0x68 # h -> h
+underlying-key cole-sebeol 0x6A 0x6E # j -> n
+underlying-key cole-sebeol 0x6B 0x65 # k -> e
+underlying-key cole-sebeol 0x6C 0x69 # l -> i
+underlying-key cole-sebeol 0x3B 0x6F # ; -> o
+underlying-key cole-sebeol 0x27 0x27 # ' -> '
+underlying-key cole-sebeol 0x7A 0x7A # z -> z
+underlying-key cole-sebeol 0x78 0x78 # x -> x
+underlying-key cole-sebeol 0x63 0x63 # c -> c
+underlying-key cole-sebeol 0x76 0x76 # v -> v
+underlying-key cole-sebeol 0x62 0x62 # b -> b
+underlying-key cole-sebeol 0x6E 0x6B # n -> k
+underlying-key cole-sebeol 0x6D 0x6D # m -> m
+underlying-key cole-sebeol 0x2C 0x2C # , -> ,
+underlying-key cole-sebeol 0x2E 0x2E # . -> .
+underlying-key cole-sebeol 0x2F 0x2F # / -> /
+underlying-key cole-sebeol 0x7E 0x7E # ~ -> ~
+underlying-key cole-sebeol 0x21 0x21 # ! -> !
+underlying-key cole-sebeol 0x40 0x40 # @ -> @
+underlying-key cole-sebeol 0x23 0x23 # # -> #
+underlying-key cole-sebeol 0x24 0x24 # $ -> $
+underlying-key cole-sebeol 0x25 0x25 # % -> %
+underlying-key cole-sebeol 0x5E 0x5E # ^ -> ^
+underlying-key cole-sebeol 0x26 0x26 # & -> &
+underlying-key cole-sebeol 0x2A 0x2A # * -> *
+underlying-key cole-sebeol 0x28 0x28 # ( -> (
+underlying-key cole-sebeol 0x29 0x29 # ) -> )
+underlying-key cole-sebeol 0x5F 0x5F # _ -> _
+underlying-key cole-sebeol 0x2B 0x2B # + -> +
+underlying-key cole-sebeol 0x51 0x51 # Q -> Q
+underlying-key cole-sebeol 0x57 0x57 # W -> W
+underlying-key cole-sebeol 0x45 0x46 # E -> F
+underlying-key cole-sebeol 0x52 0x50 # R -> P
+underlying-key cole-sebeol 0x54 0x47 # T -> G
+underlying-key cole-sebeol 0x59 0x4A # Y -> J
+underlying-key cole-sebeol 0x55 0x4C # U -> L
+underlying-key cole-sebeol 0x49 0x55 # I -> U
+underlying-key cole-sebeol 0x4F 0x59 # O -> Y
+underlying-key cole-sebeol 0x50 0x3A # P -> :
+underlying-key cole-sebeol 0x7B 0x7B # { -> {
+underlying-key cole-sebeol 0x7D 0x7D # } -> }
+underlying-key cole-sebeol 0x7C 0x7C # | -> |
+underlying-key cole-sebeol 0x41 0x41 # A -> A
+underlying-key cole-sebeol 0x53 0x52 # S -> R
+underlying-key cole-sebeol 0x44 0x53 # D -> S
+underlying-key cole-sebeol 0x46 0x54 # F -> T
+underlying-key cole-sebeol 0x47 0x44 # G -> D
+underlying-key cole-sebeol 0x48 0x48 # H -> H
+underlying-key cole-sebeol 0x4A 0x4E # J -> N
+underlying-key cole-sebeol 0x4B 0x45 # K -> E
+underlying-key cole-sebeol 0x4C 0x49 # L -> I
+underlying-key cole-sebeol 0x3A 0x4F # : -> O
+underlying-key cole-sebeol 0x22 0x22 # " -> "
+underlying-key cole-sebeol 0x5A 0x5A # Z -> Z
+underlying-key cole-sebeol 0x58 0x58 # X -> X
+underlying-key cole-sebeol 0x43 0x43 # C -> C
+underlying-key cole-sebeol 0x56 0x56 # V -> V
+underlying-key cole-sebeol 0x42 0x42 # B -> B
+underlying-key cole-sebeol 0x4E 0x4B # N -> K
+underlying-key cole-sebeol 0x4D 0x4D # M -> M
+underlying-key cole-sebeol 0x3C 0x3C # < -> <
+underlying-key cole-sebeol 0x3E 0x3E # > -> >
+underlying-key cole-sebeol 0x3F 0x3F # ? -> ?
+key cole-sebeol 0x21 U+11A9 # ! -> jongseong ssangkiyeok
+key cole-sebeol 0x22 0x22 # " -> double quotation mark
+key cole-sebeol 0x23 U+11BD # # -> jongseong cieuc
+key cole-sebeol 0x24 U+11B5 # $ -> jongseong rieul-phieuph
+key cole-sebeol 0x25 U+11B4 # % -> jongseong rieul-thieuth
+key cole-sebeol 0x26 0x26 # & -> ampersand
+key cole-sebeol 0x27 U+1110 # ' -> choseong thieuth
+key cole-sebeol 0x28 0x28 # ( -> left parenthesis
+key cole-sebeol 0x29 0x29 # ) -> right parenthesis
+key cole-sebeol 0x2A 0x2A # * -> asterisk
+key cole-sebeol 0x2B U+002B # + -> plus sign
+key cole-sebeol 0x2C U+002C # , -> comma
+key cole-sebeol 0x2D 0x2D # - -> hyphen-minus
+key cole-sebeol 0x2E U+002E # . -> period
+key cole-sebeol 0x2F U+1169 # / -> jungseong o
+key cole-sebeol 0x30 U+110F # 0 -> choseong khieukh
+key cole-sebeol 0x31 U+11C2 # 1 -> jongseong hieuh
+key cole-sebeol 0x32 U+11BB # 2 -> jongseong ssangsios
+key cole-sebeol 0x33 U+11B8 # 3 -> jongseong pieup
+key cole-sebeol 0x34 U+116D # 4 -> jungseong yo
+key cole-sebeol 0x35 U+1172 # 5 -> jungseong yu
+key cole-sebeol 0x36 U+1163 # 6 -> jungseong ya
+key cole-sebeol 0x37 U+1168 # 7 -> jungseong ye
+key cole-sebeol 0x38 U+1174 # 8 -> jungseong yi
+key cole-sebeol 0x39 U+116E # 9 -> jungseong u
+key cole-sebeol 0x3A U+0034 # : -> digit four
+key cole-sebeol 0x3B U+1107 # ; -> choseong pieup
+key cole-sebeol 0x3C 0x3C # < -> less-than sign
+key cole-sebeol 0x3D 0x3D # = -> equals sign
+key cole-sebeol 0x3E 0x3E # > -> greater-than sign
+key cole-sebeol 0x3F U+0021 # ? -> exclamation mark
+key cole-sebeol 0x40 U+11B0 # @ -> jongseong rieul-kiyeok
+key cole-sebeol 0x41 U+11AE # A -> jongseong tikeut
+key cole-sebeol 0x42 U+003F # B -> question mark
+key cole-sebeol 0x43 U+11BF # C -> jongseong khieukh
+key cole-sebeol 0x44 U+11B2 # D -> jongseong rieul-pieup
+key cole-sebeol 0x45 U+11AC # E -> jongseong nieun-cieuc
+key cole-sebeol 0x46 U+11B1 # F -> jongseong rieul-mieum
+key cole-sebeol 0x47 U+1164 # G -> jungseong yae
+key cole-sebeol 0x48 U+0030 # H -> digit zero
+key cole-sebeol 0x49 U+0037 # I -> digit seven
+key cole-sebeol 0x4A U+0031 # J -> digit one
+key cole-sebeol 0x4B U+0032 # K -> digit two
+key cole-sebeol 0x4C U+0033 # L -> digit three
+key cole-sebeol 0x4D 0x3B # M -> semicolon
+key cole-sebeol 0x4E 0x3A # N -> colon
+key cole-sebeol 0x4F U+0038 # O -> digit eight
+key cole-sebeol 0x50 U+0039 # P -> digit nine
+key cole-sebeol 0x51 U+11C1 # Q -> jongseong phieuph
+key cole-sebeol 0x52 U+11B6 # R -> jongseong rieul-hieuh
+key cole-sebeol 0x53 U+11AD # S -> jongseong nieun-hieuh
+key cole-sebeol 0x54 U+11B3 # T -> jongseong rieul-sios
+key cole-sebeol 0x55 U+0036 # U -> digit six
+key cole-sebeol 0x56 U+11AA # V -> jongseong kiyeok-sios
+key cole-sebeol 0x57 U+11C0 # W -> jongseong thikeuth
+key cole-sebeol 0x58 U+11B9 # X -> jongseong pieup-sios
+key cole-sebeol 0x59 U+0035 # Y -> digit five
+key cole-sebeol 0x5A U+11BE # Z -> jongseong chieuch
+key cole-sebeol 0x5B 0x5B # [ -> left square bracket
+key cole-sebeol 0x5C 0x5C # \ -> backslash
+key cole-sebeol 0x5D 0x5D # ] -> right square bracket
+key cole-sebeol 0x5E 0x5E # ^ -> circumflex accent
+key cole-sebeol 0x5F 0x5F # _ -> low line
+key cole-sebeol 0x60 0x60 # ` -> grave accent
+key cole-sebeol 0x61 U+11BC # a -> jongseong ieung
+key cole-sebeol 0x62 U+116E # b -> jungseong u
+key cole-sebeol 0x63 U+1166 # c -> jungseong e
+key cole-sebeol 0x64 U+1175 # d -> jungseong i
+key cole-sebeol 0x65 U+1167 # e -> jungseong yeo
+key cole-sebeol 0x66 U+1161 # f -> jungseong a
+key cole-sebeol 0x67 U+1173 # g -> jungseong eu
+key cole-sebeol 0x68 U+1102 # h -> choseong nieun
+key cole-sebeol 0x69 U+1106 # i -> choseong mieum
+key cole-sebeol 0x6A U+110B # j -> choseong ieung
+key cole-sebeol 0x6B U+1100 # k -> choseong kiyeok
+key cole-sebeol 0x6C U+110C # l -> choseong cieuc
+key cole-sebeol 0x6D U+1112 # m -> choseong hieuh
+key cole-sebeol 0x6E U+1109 # n -> choseong sios
+key cole-sebeol 0x6F U+110E # o -> choseong chieuch
+key cole-sebeol 0x70 U+1111 # p -> choseong phieuph
+key cole-sebeol 0x71 U+11BA # q -> jongseong sios
+key cole-sebeol 0x72 U+1162 # r -> jungseong ae
+key cole-sebeol 0x73 U+11AB # s -> jongseong nieun
+key cole-sebeol 0x74 U+1165 # t -> jungseong eo
+key cole-sebeol 0x75 U+1103 # u -> choseong tikeut
+key cole-sebeol 0x76 U+1169 # v -> jungseong o
+key cole-sebeol 0x77 U+11AF # w -> jongseong rieul
+key cole-sebeol 0x78 U+11A8 # x -> jongseong kiyeok
+key cole-sebeol 0x79 U+1105 # y -> choseong rieul
+key cole-sebeol 0x7A U+11B7 # z -> jongseong mieum
+key cole-sebeol 0x7B 0x7B # { -> left curly bracket
+key cole-sebeol 0x7C 0x7C # | -> vertical line
+key cole-sebeol 0x7D 0x7D # } -> right curly bracket
+key cole-sebeol 0x7E 0x7E # ~ -> tilde
+
+compat-jamo U+1100 U+3131 # choseong kiyeok -> compatibility kiyeok
+compat-jamo U+1101 U+3132 # choseong ssangkiyeok -> compatibility ssangkiyeok
+compat-jamo U+1102 U+3134 # choseong nieun -> compatibility nieun
+compat-jamo U+1103 U+3137 # choseong tikeut -> compatibility tikeut
+compat-jamo U+1104 U+3138 # choseong ssangtikeut -> compatibility ssangtikeut
+compat-jamo U+1105 U+3139 # choseong rieul -> compatibility rieul
+compat-jamo U+1106 U+3141 # choseong mieum -> compatibility mieum
+compat-jamo U+1107 U+3142 # choseong pieup -> compatibility pieup
+compat-jamo U+1108 U+3143 # choseong ssangpieup -> compatibility ssangpieup
+compat-jamo U+1109 U+3145 # choseong sios -> compatibility sios
+compat-jamo U+110A U+3146 # choseong ssangsios -> compatibility ssangsios
+compat-jamo U+110B U+3147 # choseong ieung -> compatibility ieung
+compat-jamo U+110C U+3148 # choseong cieuc -> compatibility cieuc
+compat-jamo U+110D U+3149 # choseong ssangcieuc -> compatibility ssangcieuc
+compat-jamo U+110E U+314A # choseong chieuch -> compatibility chieuch
+compat-jamo U+110F U+314B # choseong khieukh -> compatibility khieukh
+compat-jamo U+1110 U+314C # choseong thieuth -> compatibility thieuth
+compat-jamo U+1111 U+314D # choseong phieuph -> compatibility phieuph
+compat-jamo U+1112 U+314E # choseong hieuh -> compatibility hieuh
+compat-jamo U+1161 U+314F # jungseong a -> compatibility a
+compat-jamo U+1162 U+3150 # jungseong ae -> compatibility ae
+compat-jamo U+1163 U+3151 # jungseong ya -> compatibility ya
+compat-jamo U+1164 U+3152 # jungseong yae -> compatibility yae
+compat-jamo U+1165 U+3153 # jungseong eo -> compatibility eo
+compat-jamo U+1166 U+3154 # jungseong e -> compatibility e
+compat-jamo U+1167 U+3155 # jungseong yeo -> compatibility yeo
+compat-jamo U+1168 U+3156 # jungseong ye -> compatibility ye
+compat-jamo U+1169 U+3157 # jungseong o -> compatibility o
+compat-jamo U+116A U+3158 # jungseong wa -> compatibility wa
+compat-jamo U+116B U+3159 # jungseong wae -> compatibility wae
+compat-jamo U+116C U+315A # jungseong oe -> compatibility oe
+compat-jamo U+116D U+315B # jungseong yo -> compatibility yo
+compat-jamo U+116E U+315C # jungseong u -> compatibility u
+compat-jamo U+116F U+315D # jungseong weo -> compatibility weo
+compat-jamo U+1170 U+315E # jungseong we -> compatibility we
+compat-jamo U+1171 U+315F # jungseong wi -> compatibility wi
+compat-jamo U+1172 U+3160 # jungseong yu -> compatibility yu
+compat-jamo U+1173 U+3161 # jungseong eu -> compatibility eu
+compat-jamo U+1174 U+3162 # jungseong yi -> compatibility yi
+compat-jamo U+1175 U+3163 # jungseong i -> compatibility i
+compat-jamo U+11A8 U+3131 # jongseong kiyeok -> compatibility kiyeok
+compat-jamo U+11A9 U+3132 # jongseong ssangkiyeok -> compatibility ssangkiyeok
+compat-jamo U+11AA U+3133 # jongseong kiyeok-sios -> compatibility kiyeok-sios
+compat-jamo U+11AB U+3134 # jongseong nieun -> compatibility nieun
+compat-jamo U+11AC U+3135 # jongseong nieun-cieuc -> compatibility nieun-cieuc
+compat-jamo U+11AD U+3136 # jongseong nieun-hieuh -> compatibility nieun-hieuh
+compat-jamo U+11AE U+3137 # jongseong tikeut -> compatibility tikeut
+compat-jamo U+11AF U+3139 # jongseong rieul -> compatibility rieul
+compat-jamo U+11B0 U+313A # jongseong rieul-kiyeok -> compatibility rieul-kiyeok
+compat-jamo U+11B1 U+313B # jongseong rieul-mieum -> compatibility rieul-mieum
+compat-jamo U+11B2 U+313C # jongseong rieul-pieup -> compatibility rieul-pieup
+compat-jamo U+11B3 U+313D # jongseong rieul-sios -> compatibility rieul-sios
+compat-jamo U+11B4 U+313E # jongseong rieul-thieuth -> compatibility rieul-thieuth
+compat-jamo U+11B5 U+313F # jongseong rieul-phieuph -> compatibility rieul-phieuph
+compat-jamo U+11B6 U+3140 # jongseong rieul-hieuh -> compatibility rieul-hieuh
+compat-jamo U+11B7 U+3141 # jongseong mieum -> compatibility mieum
+compat-jamo U+11B8 U+3142 # jongseong pieup -> compatibility pieup
+compat-jamo U+11B9 U+3144 # jongseong pieup-sios -> compatibility pieup-sios
+compat-jamo U+11BA U+3145 # jongseong sios -> compatibility sios
+compat-jamo U+11BB U+3146 # jongseong ssangsios -> compatibility ssangsios
+compat-jamo U+11BC U+3147 # jongseong ieung -> compatibility ieung
+compat-jamo U+11BD U+3148 # jongseong cieuc -> compatibility cieuc
+compat-jamo U+11BE U+314A # jongseong chieuch -> compatibility chieuch
+compat-jamo U+11BF U+314B # jongseong khieukh -> compatibility khieukh
+compat-jamo U+11C0 U+314C # jongseong thikeuth -> compatibility thikeuth
+compat-jamo U+11C1 U+314D # jongseong phieuph -> compatibility phieuph
+compat-jamo U+11C2 U+314E # jongseong hieuh -> compatibility hieuh
+
+source-combine default / f U+116A # / jungseong o + f jungseong a -> jungseong wa
+source-combine default f / U+116A # f jungseong a + / jungseong o -> jungseong wa
+source-combine default v f U+116A # v jungseong o + f jungseong a -> jungseong wa
+source-combine default / r U+116B # / jungseong o + r jungseong ae -> jungseong wae
+source-combine default r / U+116B # r jungseong ae + / jungseong o -> jungseong wae
+source-combine default v r U+116B # v jungseong o + r jungseong ae -> jungseong wae
+source-combine default / d U+116C # / jungseong o + d jungseong i -> jungseong oe
+source-combine default d / U+116C # d jungseong i + / jungseong o -> jungseong oe
+source-combine default v d U+116C # v jungseong o + d jungseong i -> jungseong oe
+source-combine default 9 t U+116F # 9 jungseong u + t jungseong eo -> jungseong weo
+source-combine default t 9 U+116F # t jungseong eo + 9 jungseong u -> jungseong weo
+source-combine default b t U+116F # b jungseong u + t jungseong eo -> jungseong weo
+source-combine default 9 c U+1170 # 9 jungseong u + c jungseong e -> jungseong we
+source-combine default c 9 U+1170 # c jungseong e + 9 jungseong u -> jungseong we
+source-combine default b c U+1170 # b jungseong u + c jungseong e -> jungseong we
+source-combine default 9 d U+1171 # 9 jungseong u + d jungseong i -> jungseong wi
+source-combine default d 9 U+1171 # d jungseong i + 9 jungseong u -> jungseong wi
+source-combine default b d U+1171 # b jungseong u + d jungseong i -> jungseong wi
+# No source-combine rows exist for f v, r v, d v, t b, c b, or d b.
+# Those reverse v/b source-key orders must stay as standalone vowel sequences.
+
+combine default U+110B U+1100 U+1101 # weak-below: choseong ieung + choseong kiyeok -> choseong ssangkiyeok
+combine default U+1100 U+110B U+1101 # weak-below: choseong kiyeok + choseong ieung -> choseong ssangkiyeok
+combine default U+1100 U+110C U+110D # weak-below: choseong kiyeok + choseong cieuc -> choseong ssangcieuc
+combine default U+110C U+1100 U+110D # weak-below: choseong cieuc + choseong kiyeok -> choseong ssangcieuc
+combine default U+110C U+1107 U+1108 # weak-below: choseong cieuc + choseong pieup -> choseong ssangpieup
+combine default U+1107 U+110C U+1108 # weak-below: choseong pieup + choseong cieuc -> choseong ssangpieup
+combine default U+1103 U+1106 U+1104 # weak-below: choseong tikeut + choseong mieum -> choseong ssangtikeut
+combine default U+1106 U+1103 U+1104 # weak-below: choseong mieum + choseong tikeut -> choseong ssangtikeut
+combine default U+1109 U+1112 U+110A # weak-below: choseong sios + choseong hieuh -> choseong ssangsios
+combine default U+1112 U+1109 U+110A # weak-below: choseong hieuh + choseong sios -> choseong ssangsios
+combine default U+1175 U+1161 U+1164 # weak-below: jungseong i + jungseong a -> jungseong yae
+combine default U+1161 U+1175 U+1164 # weak-below: jungseong a + jungseong i -> jungseong yae
+combine default U+1175 U+1173 U+1174 # weak-below: jungseong i + jungseong eu -> jungseong yi
+combine default U+1173 U+1175 U+1174 # weak-below: jungseong eu + jungseong i -> jungseong yi
+combine default U+1167 U+1162 U+1168 # weak-below: jungseong yeo + jungseong ae -> jungseong ye
+combine default U+1162 U+1167 U+1168 # weak-below: jungseong ae + jungseong yeo -> jungseong ye
+combine default U+11BC U+11AB U+11AD # weak-below: jongseong ieung + jongseong nieun -> jongseong nieun-hieuh
+combine default U+11AB U+11BC U+11AD # weak-below: jongseong nieun + jongseong ieung -> jongseong nieun-hieuh
+combine default U+11BA U+11AF U+11B9 # weak-below: jongseong sios + jongseong rieul -> jongseong pieup-sios
+combine default U+11AF U+11BA U+11B9 # weak-below: jongseong rieul + jongseong sios -> jongseong pieup-sios
+combine default U+11B8 U+11BB U+11BD # weak-below: jongseong pieup + jongseong ssangsios -> jongseong cieuc
+combine default U+11BB U+11B8 U+11BD # weak-below: jongseong ssangsios + jongseong pieup -> jongseong cieuc
+combine default U+11C2 U+11BB U+11A9 # weak-below: jongseong hieuh + jongseong ssangsios -> jongseong ssangkiyeok
+combine default U+11BB U+11C2 U+11A9 # weak-below: jongseong ssangsios + jongseong hieuh -> jongseong ssangkiyeok
+# 약한 아래 intentionally omits same-jamo choseong tense combinations such as
+# U+1100+U+1100, U+110C+U+110C, U+1107+U+1107, U+1103+U+1103,
+# and U+1109+U+1109.
+combine default U+11A8 U+11A8 U+11A9 # jongseong kiyeok + jongseong kiyeok -> jongseong ssangkiyeok
+combine default U+11A8 U+11BA U+11AA # jongseong kiyeok + jongseong sios -> jongseong kiyeok-sios
+combine default U+11AB U+11BD U+11AC # jongseong nieun + jongseong cieuc -> jongseong nieun-cieuc
+combine default U+11AB U+11C2 U+11AD # jongseong nieun + jongseong hieuh -> jongseong nieun-hieuh
+combine default U+11AF U+11A8 U+11B0 # jongseong rieul + jongseong kiyeok -> jongseong rieul-kiyeok
+combine default U+11AF U+11B7 U+11B1 # jongseong rieul + jongseong mieum -> jongseong rieul-mieum
+combine default U+11AF U+11B8 U+11B2 # jongseong rieul + jongseong pieup -> jongseong rieul-pieup
+combine default U+11AF U+11C0 U+11B4 # jongseong rieul + jongseong thikeuth -> jongseong rieul-thieuth
+combine default U+11AF U+11C1 U+11B5 # jongseong rieul + jongseong phieuph -> jongseong rieul-phieuph
+combine default U+11AF U+11C2 U+11B6 # jongseong rieul + jongseong hieuh -> jongseong rieul-hieuh
+combine default U+11B8 U+11BA U+11B9 # jongseong pieup + jongseong sios -> jongseong pieup-sios
+combine default U+11BA U+11BA U+11BB # jongseong sios + jongseong sios -> jongseong ssangsios

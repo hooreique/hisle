@@ -1,0 +1,94 @@
+# Testing
+
+This document keeps long-lived verification procedures for `hisle`.
+
+## GUI Smoke Test
+
+Run this as a separate GUI check because InputMethodKit modifier-event delivery
+must be verified with real GUI focus.
+
+Preferred command:
+
+```sh
+make gui-smoke-test
+```
+
+This target runs the core contract/spec check, builds and installs the debug
+input method, opens a temporary file in Sublime Text, selects the `hisle` input
+source, streams `hisle` logs, sends the GUI key sequence, saves the temporary
+file through Sublime Text, and verifies the saved file content automatically.
+
+The command exiting with status 0 means the scripted setup, key sequence,
+Colemak-underlying Command+S save path, and saved file content verification all
+passed. The same script also invokes the bundled
+`hisle.app/Contents/Helpers/hisle` helper after Roman/Hangul mode transitions
+and verifies that it prints the current mode.
+
+To run only the GUI driver after a debug install:
+
+```sh
+nix develop --command -- nu tools/gui_smoke_test.nu
+```
+
+Requirements:
+
+- Sublime Text must be installed. Do not use TextEdit for this smoke test.
+- The terminal process running the script must have macOS Accessibility
+  permission so it can send GUI key events.
+- Sublime Text cold start can be slow. The driver waits for the app, the smoke
+  file window, and frontmost focus before sending key events.
+- Do not type or change focus while the script is running.
+
+Scripted smoke sequence:
+
+- Type the physical representative `E` key before any Shift mode selection.
+  The initial mode should be Roman, so the document should begin with Colemak
+  output `f`.
+- Tap right Shift once. It should select Hangul mode and commit no text.
+  The bundled `hisle` CLI should print `hangul`.
+- Type the physical representative `` ` `` key. Hangul-mode sane-punctuation
+  handling should commit a literal backtick.
+- Type representative keys `j g d`, then press Escape. Escape should flush the
+  active `의` composition instead of clearing it, select Roman mode, and still
+  pass Escape through to Sublime Text.
+  The bundled `hisle` CLI should print `roman`.
+- Type the physical representative `E` key. Because Escape selected Roman mode,
+  this should emit Colemak output `f`.
+- Tap right Shift once to select Hangul mode again, then type representative
+  keys `j t b`. The visible text after the initial backtick should become
+  `의f어ㅜ`: `j g d` verifies `ㅢ` composition, and `j t b` verifies that
+  representative `t b` stays `어ㅜ` instead of composing `워`.
+- Press Command with physical representative `D`. Because the `hisle` input
+  source declares Colemak as its `KeyboardLayout`, this should be delivered to
+  Sublime Text as Command+S, flush the active Hangul composition, save the
+  temporary file, and leave saved file content ``f`의f어ㅜ``.
+- Tap left Shift once. It should select Roman mode and commit no Shift text.
+  The bundled `hisle` CLI should print `roman`.
+- Type the physical representative `E` key. Roman mode should emit Colemak
+  output `f`, so the document text should be exactly
+  ``f`의f어ㅜf``.
+- Press Command with physical representative `D` again. This should save the
+  Roman-mode text through the same Colemak-underlying shortcut path, and
+  the script verifies that the saved file content is exactly
+  ``f`의f어ㅜf``.
+- Tap right Shift once to select Hangul mode, switch to another available input
+  source, then select `hisle` again. Returning to `hisle` should enter Roman
+  mode, so typing physical representative `E` should append Colemak output `f`.
+  The bundled `hisle` CLI should print `hangul` before switching away and
+  `roman` after returning to `hisle`.
+- Press Command with physical representative `D` again. This should save the
+  final round-trip text through the same shortcut path, and the script verifies
+  that the saved file content is exactly ``f`의f어ㅜff``.
+- Watch the terminal log stream for `hisle` key and mode events while the
+  sequence runs.
+
+This smoke test passes only if the final saved file content is exactly
+``f`의f어ㅜff`` and no extra Shift-related text appears in the saved file.
+
+Known non-issues:
+
+- Xcode may print CoreSimulator version warnings while building this macOS input
+  method target. Treat them as noise unless the build fails.
+- Xcode may print AppIntents metadata extraction warnings such as skipped
+  metadata or no AppIntents dependency found. Treat them as noise unless the
+  build fails.

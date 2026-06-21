@@ -1,0 +1,26 @@
+# NOTICE
+
+Except where otherwise noted, this repository is distributed under the MIT
+License; see `LICENSE`.
+
+## Cole Sebeol Specification
+
+Hisle's Cole Sebeol key map is an independent transcription of the Gong
+Byung-woo Sebeolsik Final layout into Hisle's own specification format.
+
+The Gong Byung-woo Sebeolsik Final layout is a functional keyboard layout. Hisle
+uses it as the basis for Hangul jamo key assignments and documents project
+specific behavior in `hisle-core/Sources/HisleCore/Resources/cole-sebeol-spec.txt`.
+
+The libhangul project (LGPL 2.1) was consulted for Unicode Hangul values,
+Sebeolsik layout data, and behavior comparison. Hisle does not vendor libhangul
+code or XML data, and it does not link to libhangul.
+
+Hisle's Unicode Hangul syllable composition code follows the algorithmic Hangul
+composition model specified by the Unicode Standard.
+
+## Development References
+
+The Gureum input method project (BSD/LGPL) was used as a reference for macOS
+Korean input-method implementation patterns, including InputMethodKit behavior.
+Hisle does not vendor Gureum code or assets.

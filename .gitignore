@@ -1,0 +1,28 @@
+# macOS
+.DS_Store
+*~
+.*.swp
+.swp
+
+# Local editor state
+.vscode/
+.idea/
+
+# Xcode
+build/
+DerivedData/
+*.xcresult
+*.moved-aside
+*.xccheckout
+*.xcscmblueprint
+xcuserdata/
+*.xcodeproj/xcuserdata/
+*.xcworkspace/xcuserdata/
+
+# SwiftPM
+.build/
+.swiftpm/
+
+# Local environment overrides
+.envrc.local
+AGENTS.local.md
