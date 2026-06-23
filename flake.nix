@@ -38,6 +38,13 @@
         ];
         shellHook = commonShellHook;
       };
+
+      browser-work = pkgs.mkShell {
+        packages = commonPackages ++ [
+          pkgs.nodejs
+        ];
+        shellHook = commonShellHook;
+      };
     };
   };
 }

@@ -92,3 +92,51 @@ Known non-issues:
 - Xcode may print AppIntents metadata extraction warnings such as skipped
   metadata or no AppIntents dependency found. Treat them as noise unless the
   build fails.
+
+## Chrome Textarea IME Reproduction
+
+Use this as a diagnostic tool for Chrome `<textarea>` behavior that must pass
+through the real macOS input method path. Playwright launches and observes
+Chrome, but all typing is sent by the Swift HID driver.
+
+Preferred command:
+
+```sh
+make chrome-ime-repro
+```
+
+To run only the repro after a debug install:
+
+```sh
+nix develop .#browser-work --command -- nu tools/chrome_ime_repro.nu
+```
+
+Useful environment options:
+
+- `SEED`, default `1`.
+- `ITERATIONS`, default `1`.
+- `RUN_ID`, default timestamp plus a short random suffix.
+- `CHROME_PATH`, optional path to Chrome or Chrome for Testing.
+- `CHROME_REMOTE_DEBUGGING_PORT`, optional fixed Chrome remote debugging port.
+- `HISLE_CHROME_KEEP_OPEN=1`, leave Chrome open after artifact capture.
+
+Artifacts are written under `build/chrome-ime/<run-id>/`:
+
+- `keys.jsonl`: Swift HID key-down/key-up events with sequence numbers,
+  timestamps, key codes, flags, and planned delay.
+- `dom-events.jsonl`: capture-phase DOM keyboard, composition, input,
+  selection, focus, and blur events.
+- `ime.log`: unified log stream for `hooreique.inputmethod.hisle`.
+- `final-state.json`: final textarea value, selection, expected value, and
+  match result.
+- `screenshot.png`: final browser screenshot.
+- `trace.zip`: Playwright trace.
+- `environment.json`: run metadata, tool versions, selected input source, and
+  timing checkpoints.
+
+Triage guide:
+
+- Missing or bad IME operation logs usually points at `hisle`.
+- Good IME logs with bad DOM events or textarea value points at the
+  Chrome/macOS/browser interaction.
+- Good DOM events followed by later value mutation points at page JavaScript.

@@ -69,6 +69,10 @@
   `make gui-smoke-test`
 - Direct GUI smoke test driver, after a debug install:
   `nix develop --command -- nu tools/gui_smoke_test.nu`
+- Chrome textarea IME reproduction tool:
+  `make chrome-ime-repro`
+- Direct Chrome textarea IME reproduction tool, after a debug install:
+  `nix develop .#browser-work --command -- nu tools/chrome_ime_repro.nu`
 - Installed companion CLI, after a debug install:
   `"$HOME/Library/Input Methods/hisle.app/Contents/Helpers/hisle"`
   Without options it prints `roman` or `hangul`; `--version` prints both the
@@ -92,10 +96,20 @@
   mode switching, modifier handling, shortcut forwarding, or bundled CLI
   behavior changes, run `make gui-smoke-test` when the local GUI prerequisites
   are available.
+- For Chrome `<textarea>` IME diagnostics, run `make chrome-ime-repro` when the
+  local GUI prerequisites are available. The Chrome diagnostic runner types only
+  through the Swift HID driver and real macOS input method path; Playwright is
+  limited to launching or observing Chrome, DOM event capture, screenshots, and
+  traces. Do not use Playwright keyboard APIs, `fill()`, or CDP text insertion
+  for the actual typing under test.
 - For the GUI smoke test, follow `docs/testing.md`. The scripted driver opens a
   temporary file in Sublime Text, streams `hisle` logs, verifies mode changes
   through the bundled CLI, sends the documented GUI key sequence including
   Colemak-underlying Command+S saves, and checks saved file content.
+- Chrome diagnostic artifacts are written under `build/chrome-ime/<run-id>/`.
+  Each run expects Accessibility permission for the terminal process, an
+  installed Chrome or `CHROME_PATH`, and a clean per-run Chrome profile managed
+  by the observer sidecar.
 - Local app builds are written under `build/` with `SYMROOT`, not Xcode's
   default DerivedData location.
 - Use the pinned Swift from `flake.nix` for Swift and SwiftPM work. Always run

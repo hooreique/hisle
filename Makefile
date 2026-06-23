@@ -14,11 +14,12 @@ DEVELOPMENT_TEAM ?=
 OTHER_CODE_SIGN_FLAGS ?=
 NU := nix develop --command -- nu
 ICON_NU := nix develop .\#icon-work --command -- nu
+BROWSER_NU := nix develop .\#browser-work --command -- nu
 SWIFT := nix develop --ignore-environment --command -- swift
 XCODEBUILD_ENV := env -u CC -u CXX -u LD -u SDKROOT -u NIX_CC -u NIX_CFLAGS_COMPILE -u NIX_CFLAGS_LINK -u NIX_LDFLAGS
 XCODEBUILD := $(XCODEBUILD_ENV) /usr/bin/xcodebuild
 
-.PHONY: all help build dmg install-debug uninstall clean icons check-toolchain core-spec-check gui-smoke-test
+.PHONY: all help build dmg install-debug uninstall clean icons check-toolchain core-spec-check gui-smoke-test chrome-ime-repro
 
 all: help
 
@@ -33,6 +34,7 @@ help:
 	@echo '    check-toolchain -- print active Xcode toolchain information'
 	@echo '    core-spec-check -- validate the Cole Sebeol core contract'
 	@echo '    gui-smoke-test -- run the Sublime Text GUI smoke test with hisle logs'
+	@echo '    chrome-ime-repro -- run the Chrome textarea IME reproduction tool'
 
 check-toolchain:
 	$(XCODEBUILD) -version
@@ -78,6 +80,9 @@ install-debug:
 
 gui-smoke-test: core-spec-check install-debug
 	$(NU) tools/gui_smoke_test.nu
+
+chrome-ime-repro: core-spec-check install-debug
+	$(BROWSER_NU) tools/chrome_ime_repro.nu
 
 uninstall:
 	$(NU) tools/uninstall.nu
