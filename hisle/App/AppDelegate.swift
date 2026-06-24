@@ -11,8 +11,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ])
 
         _ = InputMethodServer.shared
-        NSLog("hisle application launched")
-        NSLog("hisle core initialized: \(hisleCore.logSummary)")
         logger.notice("application launched")
         logger.notice("core initialized: \(self.hisleCore.logSummary, privacy: .public)")
     }

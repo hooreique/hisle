@@ -23,6 +23,9 @@ xcuserdata/
 .build/
 .swiftpm/
 
+# Node dependencies
+node_modules
+
 # Local environment overrides
 .envrc.local
 AGENTS.local.md

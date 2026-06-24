@@ -14,6 +14,7 @@ final class InputController: IMKInputController {
 
     private var hangulEngine = InputController.makeEngine()
     private var hasMarkedText = false
+    private var currentMarkedText = ""
     private var shiftTap = ShiftTapDetector()
 
     private var inputMode: HisleInputMode {
@@ -24,8 +25,10 @@ final class InputController: IMKInputController {
     override init!(server: IMKServer!, delegate: Any!, client inputClient: Any!) {
         super.init(server: server, delegate: delegate, client: inputClient)
         HisleInputModeState.write(inputMode)
-        NSLog("hisle controller initialized: client=\(String(describing: inputClient))")
-        logger.notice("controller initialized: client=\(String(describing: inputClient), privacy: .public)")
+        logger.notice("controller initialized")
+#if DEBUG
+        logger.debug("controller client=\(String(describing: inputClient), privacy: .public)")
+#endif
     }
 
     override func activateServer(_ sender: Any!) {
@@ -50,7 +53,24 @@ final class InputController: IMKInputController {
     }
 
     override func recognizedEvents(_ sender: Any!) -> Int {
-        Int(NSEvent.EventTypeMask(arrayLiteral: .keyDown, .flagsChanged).rawValue)
+        Int(NSEvent.EventTypeMask(arrayLiteral:
+            .keyDown,
+            .flagsChanged,
+            .leftMouseDown,
+            .rightMouseDown,
+            .otherMouseDown
+        ).rawValue)
+    }
+
+    override func mouseDown(
+        onCharacterIndex _: Int,
+        coordinate _: NSPoint,
+        withModifier _: Int,
+        continueTracking _: UnsafeMutablePointer<ObjCBool>!,
+        client sender: Any
+    ) -> Bool {
+        flushBeforeForwarding(to: sender)
+        return false
     }
 
     override func handle(_ event: NSEvent, client sender: Any) -> Bool {
@@ -58,8 +78,10 @@ final class InputController: IMKInputController {
 
         if event.type == .flagsChanged {
             let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+#if DEBUG
             NSLog("hisle flagsChanged keyCode=\(event.keyCode) modifiers=\(modifiers.rawValue)")
             logger.debug("flagsChanged keyCode=\(event.keyCode, privacy: .public) modifiers=\(modifiers.rawValue, privacy: .public)")
+#endif
 
             guard let selectedMode = shiftTap.handleFlagsChanged(
                 keyCode: event.keyCode,
@@ -76,8 +98,9 @@ final class InputController: IMKInputController {
 
         let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
 #if DEBUG
-        NSLog("hisle handle keyCode=\(event.keyCode) modifiers=\(modifiers.rawValue) text=\(event.characters ?? "")")
-        logger.debug("handle keyCode=\(event.keyCode, privacy: .public) modifiers=\(modifiers.rawValue, privacy: .public) text=\(event.characters ?? "", privacy: .public)")
+        let textLength = event.characters?.utf16.count ?? 0
+        NSLog("hisle handle keyCode=\(event.keyCode) modifiers=\(modifiers.rawValue) textLength=\(textLength)")
+        logger.debug("handle keyCode=\(event.keyCode, privacy: .public) modifiers=\(modifiers.rawValue, privacy: .public) textLength=\(textLength, privacy: .public)")
 #endif
 
         return handleKeyInput(
@@ -96,6 +119,18 @@ final class InputController: IMKInputController {
         _ = apply(hangulEngine.process(.clear), to: client())
     }
 
+    @objc override func updateComposition() {
+        super.updateComposition()
+    }
+
+    @objc override func composedString(_ sender: Any!) -> Any! {
+        currentMarkedText
+    }
+
+    @objc override func originalString(_ sender: Any!) -> NSAttributedString! {
+        NSAttributedString(string: currentMarkedText)
+    }
+
     private static func makeEngine() -> ColeSebeolEngine {
         do {
             return try ColeSebeolEngine()
@@ -111,6 +146,10 @@ final class InputController: IMKInputController {
         client sender: Any?
     ) -> Bool {
         shiftTap.cancelForKeyInput()
+#if DEBUG
+        traceClientRanges("before-key keyCode=\(keyCode)", sender: sender)
+        logInconsistentMarkedRangeIfNeeded(client: sender)
+#endif
 
         let modifiers = flags.subtracting(.capsLock)
 
@@ -175,7 +214,9 @@ final class InputController: IMKInputController {
         }
 
         inputMode = mode
+#if DEBUG
         logger.debug("input mode selected \(mode.description, privacy: .public)")
+#endif
         return handled
     }
 
@@ -276,8 +317,19 @@ final class InputController: IMKInputController {
             return false
         }
 
-        client.insertText(text, replacementRange: replacementRange(for: client))
+        let replacementRange = replacementRange(for: client)
+#if DEBUG
+        traceClientRanges(
+            "before-insert committedLength=\(text.utf16.count) replacement=\(NSStringFromRange(replacementRange))",
+            client: client
+        )
+#endif
+        client.insertText(text, replacementRange: replacementRange)
+        currentMarkedText = ""
         hasMarkedText = false
+#if DEBUG
+        traceClientRanges("after-insert committedLength=\(text.utf16.count)", client: client)
+#endif
         return true
     }
 
@@ -288,24 +340,41 @@ final class InputController: IMKInputController {
         }
 
         if !output.committedText.isEmpty {
-            client.insertText(output.committedText, replacementRange: replacementRange(for: client))
+            let replacementRange = replacementRange(for: client)
+#if DEBUG
+            traceClientRanges(
+                "before-commit committedLength=\(output.committedText.utf16.count) replacement=\(NSStringFromRange(replacementRange))",
+                client: client
+            )
+#endif
+            client.insertText(output.committedText, replacementRange: replacementRange)
+            currentMarkedText = ""
             hasMarkedText = false
+#if DEBUG
+            traceClientRanges("after-commit committedLength=\(output.committedText.utf16.count)", client: client)
+#endif
         }
 
         if !output.markedText.isEmpty {
-            client.setMarkedText(
-                output.markedText,
-                selectionRange: NSRange(location: output.markedText.utf16.count, length: 0),
-                replacementRange: replacementRange(for: client)
-            )
+            currentMarkedText = output.markedText
             hasMarkedText = true
+#if DEBUG
+            traceClientRanges("before-update-composition markedLength=\(output.markedText.utf16.count)", client: client)
+#endif
+            updateComposition()
+#if DEBUG
+            traceClientRanges("after-update-composition markedLength=\(output.markedText.utf16.count)", client: client)
+#endif
         } else if hasMarkedText {
-            client.setMarkedText(
-                "",
-                selectionRange: NSRange(location: 0, length: 0),
-                replacementRange: replacementRange(for: client)
-            )
+            currentMarkedText = ""
             hasMarkedText = false
+#if DEBUG
+            traceClientRanges("before-clear-composition", client: client)
+#endif
+            updateComposition()
+#if DEBUG
+            traceClientRanges("after-clear-composition", client: client)
+#endif
         }
 
         return true
@@ -318,17 +387,159 @@ final class InputController: IMKInputController {
         return client()
     }
 
-    private func replacementRange(for client: IMKTextInput) -> NSRange {
-        let markedRange = client.markedRange()
-        if markedRange.location != NSNotFound {
-            return markedRange
+#if DEBUG
+    private func logInconsistentMarkedRangeIfNeeded(client sender: Any?) {
+        guard isClientRangeTracingEnabled,
+              hasMarkedText,
+              let client = textClient(from: sender) else {
+            return
         }
 
         let selectedRange = client.selectedRange()
+        let markedRange = client.markedRange()
+        guard selectedRange.location != NSNotFound else {
+            return
+        }
+
+        if markedRange.location != NSNotFound,
+           markedRange.length > 0,
+           isSelectionRange(selectedRange, consistentWithMarkedRange: markedRange) {
+            return
+        }
+
+        logger.debug(
+            "inconsistent ranges selected=\(NSStringFromRange(selectedRange), privacy: .public) marked=\(NSStringFromRange(markedRange), privacy: .public)"
+        )
+    }
+
+    private var isClientRangeTracingEnabled: Bool {
+        Self.debugFlagIsEnabled(
+            environmentKey: "HISLE_TRACE_CLIENT_RANGES",
+            defaultsKey: "traceClientRanges"
+        )
+    }
+
+    private static func debugFlagIsEnabled(environmentKey: String, defaultsKey: String) -> Bool {
+        if let environmentValue = ProcessInfo.processInfo.environment[environmentKey] {
+            let normalizedValue = environmentValue.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            return ["1", "true", "yes", "on"].contains(normalizedValue)
+        }
+
+        if UserDefaults.standard.bool(forKey: defaultsKey) {
+            return true
+        }
+
+        return UserDefaults(suiteName: HisleInputModeState.suiteName)?.bool(forKey: defaultsKey) == true
+    }
+
+    private func traceClientRanges(_ stage: String, sender: Any?) {
+        guard isClientRangeTracingEnabled else {
+            return
+        }
+
+        guard let client = textClient(from: sender) else {
+            logger.debug("client-range stage=\(stage, privacy: .public) missing-client")
+            return
+        }
+
+        traceClientRanges(stage, client: client)
+    }
+
+    private func traceClientRanges(_ stage: String, client: IMKTextInput) {
+        guard isClientRangeTracingEnabled else {
+            return
+        }
+
+        let selectedRange = client.selectedRange()
+        let markedRange = client.markedRange()
+        logger.debug(
+            "client-range stage=\(stage, privacy: .public) selected=\(NSStringFromRange(selectedRange), privacy: .public) marked=\(NSStringFromRange(markedRange), privacy: .public) hasMarkedText=\(self.hasMarkedText, privacy: .public) currentMarkedLength=\(self.currentMarkedText.utf16.count, privacy: .public)"
+        )
+    }
+
+    private func traceReplacementRange(
+        _ replacementRange: NSRange,
+        selectedRange: NSRange,
+        markedRange: NSRange,
+        reason: String
+    ) {
+        guard isClientRangeTracingEnabled else {
+            return
+        }
+
+        logger.debug(
+            "client-range replacement=\(NSStringFromRange(replacementRange), privacy: .public) reason=\(reason, privacy: .public) selected=\(NSStringFromRange(selectedRange), privacy: .public) marked=\(NSStringFromRange(markedRange), privacy: .public) hasMarkedText=\(self.hasMarkedText, privacy: .public) currentMarkedLength=\(self.currentMarkedText.utf16.count, privacy: .public)"
+        )
+    }
+#endif
+
+    private func isSelectionRange(_ selectedRange: NSRange, consistentWithMarkedRange markedRange: NSRange) -> Bool {
+        if selectedRange.location == markedRange.location {
+            return true
+        }
+
+        guard let selectedEnd = upperBound(of: selectedRange),
+              let markedEnd = upperBound(of: markedRange)
+        else {
+            return false
+        }
+
+        if selectedEnd == markedEnd {
+            return true
+        }
+
+        let (terminalLocation, overflow) = markedEnd.addingReportingOverflow(1)
+        return !overflow && selectedRange.location == terminalLocation
+    }
+
+    private func upperBound(of range: NSRange) -> Int? {
+        guard range.location != NSNotFound else {
+            return nil
+        }
+
+        let (upperBound, overflow) = range.location.addingReportingOverflow(range.length)
+        return overflow ? nil : upperBound
+    }
+
+    private func replacementRange(for client: IMKTextInput) -> NSRange {
+        let selectedRange = client.selectedRange()
+        let markedRange = client.markedRange()
+
+        if hasMarkedText, markedRange.location != NSNotFound, markedRange.length > 0 {
+            if selectedRange.location == NSNotFound ||
+                isSelectionRange(selectedRange, consistentWithMarkedRange: markedRange) {
+#if DEBUG
+                traceReplacementRange(markedRange, selectedRange: selectedRange, markedRange: markedRange, reason: "marked")
+#endif
+                return markedRange
+            }
+
+            if selectedRange.length > 0 {
+#if DEBUG
+                traceReplacementRange(selectedRange, selectedRange: selectedRange, markedRange: markedRange, reason: "selected")
+#endif
+                return selectedRange
+            }
+
+            let notFound = NSRange(location: NSNotFound, length: 0)
+#if DEBUG
+            traceReplacementRange(notFound, selectedRange: selectedRange, markedRange: markedRange, reason: "inconsistent")
+#endif
+            return notFound
+        }
+
         if selectedRange.location != NSNotFound, selectedRange.length > 0 {
+#if DEBUG
+            traceReplacementRange(selectedRange, selectedRange: selectedRange, markedRange: markedRange, reason: "selected")
+#endif
             return selectedRange
         }
-        return NSRange(location: NSNotFound, length: 0)
+
+        let notFound = NSRange(location: NSNotFound, length: 0)
+#if DEBUG
+        traceReplacementRange(notFound, selectedRange: selectedRange, markedRange: markedRange, reason: "none")
+#endif
+        return notFound
     }
 }
 

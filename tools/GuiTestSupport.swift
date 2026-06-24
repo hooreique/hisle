@@ -33,6 +33,7 @@ enum KeyCode {
     static let leftCommand: CGKeyCode = 55
     static let leftShift: CGKeyCode = 56
     static let rightShift: CGKeyCode = 60
+    static let downArrow: CGKeyCode = 125
 }
 
 enum KeyEventPhase: String {
@@ -327,6 +328,72 @@ func focusedWindowFrame(for app: NSRunningApplication) -> CGRect? {
     return CGRect(origin: position, size: size)
 }
 
+private func frame(of element: AXUIElement) -> CGRect? {
+    var positionValue: CFTypeRef?
+    var sizeValue: CFTypeRef?
+    guard AXUIElementCopyAttributeValue(element, kAXPositionAttribute as CFString, &positionValue) == .success,
+          AXUIElementCopyAttributeValue(element, kAXSizeAttribute as CFString, &sizeValue) == .success,
+          let positionAXValue = positionValue,
+          let sizeAXValue = sizeValue else {
+        return nil
+    }
+
+    var position = CGPoint.zero
+    var size = CGSize.zero
+    guard AXValueGetValue(positionAXValue as! AXValue, .cgPoint, &position),
+          AXValueGetValue(sizeAXValue as! AXValue, .cgSize, &size) else {
+        return nil
+    }
+
+    return CGRect(origin: position, size: size)
+}
+
+private func firstAccessibilityDescendant(
+    of element: AXUIElement,
+    role expectedRole: String,
+    depth: Int = 0
+) -> AXUIElement? {
+    guard depth < 12 else {
+        return nil
+    }
+
+    var roleValue: CFTypeRef?
+    if AXUIElementCopyAttributeValue(element, kAXRoleAttribute as CFString, &roleValue) == .success,
+       let role = roleValue as? String,
+       role == expectedRole {
+        return element
+    }
+
+    var childrenValue: CFTypeRef?
+    guard AXUIElementCopyAttributeValue(element, kAXChildrenAttribute as CFString, &childrenValue) == .success,
+          let children = childrenValue as? [AXUIElement] else {
+        return nil
+    }
+
+    for child in children {
+        if let descendant = firstAccessibilityDescendant(of: child, role: expectedRole, depth: depth + 1) {
+            return descendant
+        }
+    }
+
+    return nil
+}
+
+func focusedWebAreaFrame(for app: NSRunningApplication) -> CGRect? {
+    let application = AXUIElementCreateApplication(app.processIdentifier)
+    var windowValue: CFTypeRef?
+    guard AXUIElementCopyAttributeValue(application, kAXFocusedWindowAttribute as CFString, &windowValue) == .success,
+          let window = windowValue else {
+        return nil
+    }
+
+    guard let webArea = firstAccessibilityDescendant(of: window as! AXUIElement, role: "AXWebArea") else {
+        return nil
+    }
+
+    return frame(of: webArea)
+}
+
 func activate(_ app: NSRunningApplication) {
     if #available(macOS 14.0, *) {
         app.activate(options: [.activateAllWindows])
@@ -364,6 +431,32 @@ func clickFocusedWindowCenter(of app: NSRunningApplication, appName: String) thr
         mouseButton: .left
     ) else {
         throw GuiTestFailure.message("Could not create mouse events for \(appName) focus.")
+    }
+
+    mouseDown.post(tap: .cghidEventTap)
+    Thread.sleep(forTimeInterval: 0.08)
+    mouseUp.post(tap: .cghidEventTap)
+    Thread.sleep(forTimeInterval: 0.2)
+}
+
+func clickScreenPoint(_ point: CGPoint, description: String) throws {
+    guard let source = CGEventSource(stateID: .hidSystemState) else {
+        throw GuiTestFailure.message("Could not create a CGEventSource for \(description).")
+    }
+
+    guard let mouseDown = CGEvent(
+        mouseEventSource: source,
+        mouseType: .leftMouseDown,
+        mouseCursorPosition: point,
+        mouseButton: .left
+    ),
+    let mouseUp = CGEvent(
+        mouseEventSource: source,
+        mouseType: .leftMouseUp,
+        mouseCursorPosition: point,
+        mouseButton: .left
+    ) else {
+        throw GuiTestFailure.message("Could not create mouse events for \(description).")
     }
 
     mouseDown.post(tap: .cghidEventTap)

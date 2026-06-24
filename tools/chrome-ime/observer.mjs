@@ -10,10 +10,23 @@ const observerPort = Number(process.env.OBSERVER_PORT ?? '0');
 const remoteDebuggingPort = process.env.CHROME_REMOTE_DEBUGGING_PORT ?? '';
 const chromePath = process.env.CHROME_PATH ?? '';
 const iterations = Number(process.env.ITERATIONS ?? '1');
+const targetKind = process.env.HISLE_CHROME_TARGET ?? 'textarea';
+const initialText = process.env.HISLE_CHROME_INITIAL_TEXT ?? '';
+const initialCaretText = process.env.HISLE_CHROME_INITIAL_CARET ?? '';
+const initialRender = nonEmptyEnv('HISLE_CHROME_INITIAL_RENDER', 'text');
+const moveAfterCompositionCaretText = process.env.HISLE_CHROME_MOVE_AFTER_COMPOSITION_CARET ?? '';
+const moveAfterInputCaretText = process.env.HISLE_CHROME_MOVE_AFTER_INPUT_CARET ?? '';
+const clickAfterInputCaretText = process.env.HISLE_CHROME_CLICK_AFTER_INPUT_CARET ?? '';
+const forceRenderOnCompositionEnd = process.env.HISLE_CHROME_FORCE_RENDER_ON_COMPOSITION_END === '1';
+const editorChaos = process.env.HISLE_CHROME_EDITOR_CHAOS ?? '';
+const chaosDelayMilliseconds = numberFromEnv('HISLE_CHROME_CHAOS_DELAY_MS', 650);
 const keepOpen = process.env.HISLE_CHROME_KEEP_OPEN === '1';
 const traceEnabled = process.env.HISLE_CHROME_TRACE !== '0';
+const allowMismatch = process.env.HISLE_CHROME_ALLOW_MISMATCH === '1';
 const expectedUnit = 'f`\u{C758}f\u{C5B4}\u{315C}f';
-const expectedValue = process.env.EXPECTED_VALUE ?? expectedUnit.repeat(iterations);
+const expectedValue = process.env.EXPECTED_VALUE && process.env.EXPECTED_VALUE.length > 0
+  ? process.env.EXPECTED_VALUE
+  : expectedUnit.repeat(iterations);
 const readyFile = path.join(runDir, 'observer-ready.json');
 const pidFile = path.join(runDir, 'observer.pid');
 const userDataDir = path.join(runDir, 'chrome-profile');
@@ -27,6 +40,15 @@ await fs.mkdir(runDir, { recursive: true });
 await fs.writeFile(pidFile, `${process.pid}\n`, 'utf8');
 
 try {
+  if (!['textarea', 'contenteditable', 'wysiwyg'].includes(targetKind)) {
+    throw new Error(`Unsupported HISLE_CHROME_TARGET: ${targetKind}`);
+  }
+  if (!['text', 'spans', 'paragraphs'].includes(initialRender)) {
+    throw new Error(`Unsupported HISLE_CHROME_INITIAL_RENDER: ${initialRender}`);
+  }
+  if (!['', 'idle-normalize', 'focus-pulse', 'active-rerender', 'active-rerender-focus-pulse'].includes(editorChaos)) {
+    throw new Error(`Unsupported HISLE_CHROME_EDITOR_CHAOS: ${editorChaos}`);
+  }
   await startBrowser();
   await startServer();
   await writeReadyFile();
@@ -53,6 +75,20 @@ function requiredEnv(name) {
     throw new Error(`${name} is required`);
   }
   return value;
+}
+
+function nonEmptyEnv(name, fallback) {
+  const value = process.env[name];
+  return value && value.length > 0 ? value : fallback;
+}
+
+function numberFromEnv(name, fallback) {
+  const text = process.env[name];
+  if (!text) {
+    return fallback;
+  }
+  const value = Number(text);
+  return Number.isFinite(value) ? value : fallback;
 }
 
 async function startBrowser() {
@@ -89,6 +125,12 @@ async function startBrowser() {
 }
 
 async function installTestPage(targetPage) {
+  const isTextarea = targetKind === 'textarea';
+  const isWysiwyg = targetKind === 'wysiwyg';
+  const targetMarkup = isTextarea
+    ? '<textarea id="target" class="input-surface" autofocus spellcheck="false" autocapitalize="off" autocomplete="off"></textarea>'
+    : `<div id="target" class="input-surface editable${isWysiwyg ? ' wysiwyg' : ''}" contenteditable="true" role="textbox" aria-label="hisle Chrome IME Repro" spellcheck="false" autocapitalize="off" autocomplete="off"></div>`;
+
   await targetPage.setContent(`<!doctype html>
 <html>
 <head>
@@ -119,7 +161,7 @@ async function installTestPage(targetPage) {
       font-weight: 600;
     }
 
-    textarea {
+    .input-surface {
       box-sizing: border-box;
       width: 100%;
       min-height: 58vh;
@@ -132,25 +174,70 @@ async function installTestPage(targetPage) {
       background: white;
       color: #111827;
       outline: none;
+      white-space: pre-wrap;
+      overflow-wrap: break-word;
     }
 
-    textarea:focus {
+    .input-surface:focus {
       border-color: #0f766e;
       box-shadow: 0 0 0 4px rgba(15, 118, 110, 0.18);
+    }
+
+    .editable:empty::before {
+      content: attr(data-placeholder);
+      color: #9ca3af;
+    }
+
+    .wysiwyg {
+      font-family: "Apple SD Gothic Neo", "Noto Sans CJK KR", ui-sans-serif, system-ui, sans-serif;
+    }
+
+    .wysiwyg span {
+      border-radius: 3px;
+    }
+
+    .wysiwyg p {
+      margin: 0;
+      min-height: 1.45em;
     }
   </style>
 </head>
 <body>
   <main>
-    <h1>hisle Chrome IME Repro</h1>
-    <textarea id="target" autofocus spellcheck="false" autocapitalize="off" autocomplete="off"></textarea>
+    <h1>hisle Chrome IME Repro - ${targetKind}</h1>
+    ${targetMarkup}
   </main>
 </body>
 </html>`);
 
-  await targetPage.evaluate(() => {
-    const textarea = document.getElementById('target');
+  await targetPage.evaluate(({
+    kind,
+    initialText,
+    initialCaretText,
+    initialRender,
+    moveAfterCompositionCaretText,
+    moveAfterInputCaretText,
+    clickAfterInputCaretText,
+    forceRenderOnCompositionEnd,
+    editorChaos,
+    chaosDelayMilliseconds,
+  }) => {
+    const target = document.getElementById('target');
+    const isTextarea = target instanceof HTMLTextAreaElement;
+    const isWysiwyg = kind === 'wysiwyg';
+    const initialCaret = initialCaretText === '' ? null : Number(initialCaretText);
+    const moveAfterCompositionCaret = moveAfterCompositionCaretText === '' ? null : Number(moveAfterCompositionCaretText);
+    const moveAfterInputCaret = moveAfterInputCaretText === '' ? null : Number(moveAfterInputCaretText);
+    const clickAfterInputCaret = clickAfterInputCaretText === '' ? null : Number(clickAfterInputCaretText);
+    let idleTimer = null;
+    let compositionEndCount = 0;
+    let inputCount = 0;
     const eventTypes = [
+      'pointerdown',
+      'pointerup',
+      'mousedown',
+      'mouseup',
+      'click',
       'keydown',
       'keyup',
       'compositionstart',
@@ -164,7 +251,18 @@ async function installTestPage(targetPage) {
     ];
 
     window.__hisleEvents = [];
+    window.__hisleChaosEvents = [];
     window.__hisleEventSequence = 0;
+
+    target.dataset.placeholder = kind;
+    if (initialText) {
+      if (isTextarea) {
+        target.value = initialText;
+        target.setSelectionRange(initialText.length, initialText.length);
+      } else {
+        target.textContent = initialText;
+      }
+    }
 
     function activeElementIdentity() {
       const element = document.activeElement;
@@ -182,9 +280,364 @@ async function installTestPage(targetPage) {
       return Object.prototype.hasOwnProperty.call(event, key) ? event[key] : null;
     }
 
+    function targetValue() {
+      if (!isTextarea && initialRender === 'paragraphs') {
+        const lines = Array.from(target.querySelectorAll('[data-line]'));
+        if (lines.length > 0) {
+          return lines.map((line) => line.textContent ?? '').join('\n');
+        }
+      }
+      return isTextarea ? target.value : target.textContent ?? '';
+    }
+
+    function textOffset(container, offset) {
+      if (!container || !target.contains(container)) {
+        return null;
+      }
+
+      if (!isTextarea && initialRender === 'paragraphs') {
+        let logicalOffset = 0;
+        const lines = Array.from(target.querySelectorAll('[data-line]'));
+        for (const [lineIndex, line] of lines.entries()) {
+          const walker = document.createTreeWalker(line, NodeFilter.SHOW_TEXT);
+          let node = walker.nextNode();
+          while (node) {
+            if (node === container) {
+              return logicalOffset + offset;
+            }
+            logicalOffset += node.data.length;
+            node = walker.nextNode();
+          }
+
+          if (container === line) {
+            return logicalOffset;
+          }
+
+          if (lineIndex < lines.length - 1) {
+            logicalOffset += 1;
+          }
+        }
+        return null;
+      }
+
+      const range = document.createRange();
+      range.selectNodeContents(target);
+      try {
+        range.setEnd(container, offset);
+      } catch {
+        return null;
+      }
+      return range.toString().length;
+    }
+
+    function selectionState() {
+      if (isTextarea) {
+        return {
+          selection_start: target.selectionStart,
+          selection_end: target.selectionEnd,
+          selection_anchor: target.selectionStart,
+          selection_focus: target.selectionEnd,
+        };
+      }
+
+      const selection = window.getSelection();
+      if (!selection || selection.rangeCount === 0) {
+        return {
+          selection_start: null,
+          selection_end: null,
+          selection_anchor: null,
+          selection_focus: null,
+        };
+      }
+
+      const range = selection.getRangeAt(0);
+      const start = textOffset(range.startContainer, range.startOffset);
+      const end = textOffset(range.endContainer, range.endOffset);
+
+      return {
+        selection_start: start,
+        selection_end: end,
+        selection_anchor: textOffset(selection.anchorNode, selection.anchorOffset),
+        selection_focus: textOffset(selection.focusNode, selection.focusOffset),
+      };
+    }
+
+    function recordChaos(action, extra = {}) {
+      const selection = selectionState();
+      window.__hisleChaosEvents.push({
+        sequence: window.__hisleChaosEvents.length + 1,
+        wall_clock_timestamp: new Date().toISOString(),
+        performance_now: performance.now(),
+        action,
+        composing: target.dataset.composing === '1',
+        value: targetValue(),
+        selection_start: selection.selection_start,
+        selection_end: selection.selection_end,
+        active_element: activeElementIdentity(),
+        ...extra,
+      });
+    }
+
+    function setTextSelectionByOffset(offset) {
+      if (isTextarea) {
+        const bounded = Math.max(0, Math.min(offset, target.value.length));
+        target.setSelectionRange(bounded, bounded);
+        return true;
+      }
+
+      if (initialRender === 'paragraphs') {
+        const bounded = Math.max(0, Math.min(offset, targetValue().length));
+        let remaining = bounded;
+        const lines = Array.from(target.querySelectorAll('[data-line]'));
+        for (const [lineIndex, line] of lines.entries()) {
+          const lineText = line.textContent ?? '';
+          if (remaining <= lineText.length) {
+            const walker = document.createTreeWalker(line, NodeFilter.SHOW_TEXT);
+            let textRemaining = remaining;
+            let node = walker.nextNode();
+            while (node) {
+              if (textRemaining <= node.data.length) {
+                const selection = window.getSelection();
+                const range = document.createRange();
+                range.setStart(node, textRemaining);
+                range.collapse(true);
+                selection.removeAllRanges();
+                selection.addRange(range);
+                return true;
+              }
+              textRemaining -= node.data.length;
+              node = walker.nextNode();
+            }
+
+            const selection = window.getSelection();
+            const range = document.createRange();
+            range.selectNodeContents(line);
+            range.collapse(false);
+            selection.removeAllRanges();
+            selection.addRange(range);
+            return true;
+          }
+
+          remaining -= lineText.length;
+          if (lineIndex < lines.length - 1) {
+            if (remaining === 0) {
+              const selection = window.getSelection();
+              const range = document.createRange();
+              range.selectNodeContents(line);
+              range.collapse(false);
+              selection.removeAllRanges();
+              selection.addRange(range);
+              return true;
+            }
+            remaining -= 1;
+          }
+        }
+      }
+
+      const walker = document.createTreeWalker(target, NodeFilter.SHOW_TEXT);
+      let remaining = Math.max(0, Math.min(offset, targetValue().length));
+      let node = walker.nextNode();
+      while (node) {
+        if (remaining <= node.data.length) {
+          const selection = window.getSelection();
+          const range = document.createRange();
+          range.setStart(node, remaining);
+          range.collapse(true);
+          selection.removeAllRanges();
+          selection.addRange(range);
+          return true;
+        }
+        remaining -= node.data.length;
+        node = walker.nextNode();
+      }
+
+      const selection = window.getSelection();
+      const range = document.createRange();
+      range.setStart(target, target.childNodes.length);
+      range.collapse(true);
+      selection.removeAllRanges();
+      selection.addRange(range);
+      return false;
+    }
+
+    function textPositionForOffset(offset) {
+      const bounded = Math.max(0, Math.min(offset, targetValue().length));
+      if (isTextarea) {
+        const rect = target.getBoundingClientRect();
+        return {
+          x: rect.left + 24,
+          y: rect.top + 24,
+          offset: bounded,
+          estimated: true,
+        };
+      }
+
+      const walker = document.createTreeWalker(target, NodeFilter.SHOW_TEXT);
+      let remaining = bounded;
+      let node = walker.nextNode();
+      let previousTextNode = null;
+      while (node) {
+        if (remaining <= node.data.length) {
+          const range = document.createRange();
+          const start = Math.min(remaining, Math.max(0, node.data.length - 1));
+          const end = Math.min(node.data.length, start + 1);
+          range.setStart(node, start);
+          range.setEnd(node, end);
+          const rect = range.getBoundingClientRect();
+          return {
+            x: rect.left + 1,
+            y: rect.top + rect.height / 2,
+            offset: bounded,
+            estimated: false,
+          };
+        }
+        remaining -= node.data.length;
+        previousTextNode = node;
+        node = walker.nextNode();
+      }
+
+      if (previousTextNode) {
+        const range = document.createRange();
+        const start = Math.max(0, previousTextNode.data.length - 1);
+        range.setStart(previousTextNode, start);
+        range.setEnd(previousTextNode, previousTextNode.data.length);
+        const rect = range.getBoundingClientRect();
+        return {
+          x: rect.right + 1,
+          y: rect.top + rect.height / 2,
+          offset: bounded,
+          estimated: false,
+        };
+      }
+
+      const rect = target.getBoundingClientRect();
+      return {
+        x: rect.left + 24,
+        y: rect.top + 24,
+        offset: bounded,
+        estimated: true,
+      };
+    }
+
+    function estimatedScreenPointForClientPoint(point) {
+      if (!point) {
+        return null;
+      }
+      const chromeLeftInset = (window.outerWidth - window.innerWidth) / 2;
+      const chromeTopInset = window.outerHeight - window.innerHeight - chromeLeftInset;
+      return {
+        x: window.screenX + chromeLeftInset + point.x,
+        y: window.screenY + chromeTopInset + point.y,
+      };
+    }
+
+    function rerenderWysiwygDOM({ allowDuringComposition = false, force = false } = {}) {
+      if (!isWysiwyg || (!allowDuringComposition && target.dataset.composing === '1')) {
+        return;
+      }
+
+      const value = targetValue();
+      if (value === '' || (!force && target.childElementCount > 0)) {
+        return;
+      }
+
+      const selection = window.getSelection();
+      const caretOffset = selection?.rangeCount ? textOffset(selection.focusNode, selection.focusOffset) : value.length;
+      if (initialRender === 'paragraphs') {
+        renderParagraphDOM(value);
+        if (caretOffset != null) {
+          setTextSelectionByOffset(caretOffset);
+        }
+        return;
+      }
+
+      const fragment = document.createDocumentFragment();
+
+      for (const character of value) {
+        const span = document.createElement('span');
+        span.textContent = character;
+        fragment.appendChild(span);
+      }
+
+      target.replaceChildren(fragment);
+      if (caretOffset != null) {
+        setTextSelectionByOffset(caretOffset);
+      }
+    }
+
+    function renderParagraphDOM(value) {
+      const fragment = document.createDocumentFragment();
+      for (const line of value.split('\n')) {
+        const paragraph = document.createElement('p');
+        paragraph.dataset.line = '1';
+        if (line.length === 0) {
+          paragraph.appendChild(document.createElement('br'));
+        } else {
+          for (const character of line) {
+            const span = document.createElement('span');
+            span.textContent = character;
+            paragraph.appendChild(span);
+          }
+        }
+        fragment.appendChild(paragraph);
+      }
+      target.replaceChildren(fragment);
+    }
+
+    function idleEditorMaintenance() {
+      if (!editorChaos || (target.dataset.composing === '1' && !editorChaos.startsWith('active-rerender'))) {
+        return;
+      }
+
+      const before = selectionState();
+      recordChaos('idle-before');
+
+      if (editorChaos === 'idle-normalize') {
+        rerenderWysiwygDOM();
+        if (before.selection_focus != null) {
+          setTextSelectionByOffset(before.selection_focus);
+        }
+      } else if (editorChaos === 'focus-pulse') {
+        target.blur();
+        recordChaos('focus-pulse-blur');
+        target.focus();
+        if (before.selection_focus != null) {
+          setTextSelectionByOffset(before.selection_focus);
+        }
+      } else if (editorChaos === 'active-rerender') {
+        rerenderWysiwygDOM({ allowDuringComposition: true, force: true });
+        if (before.selection_focus != null) {
+          setTextSelectionByOffset(before.selection_focus);
+        }
+      } else if (editorChaos === 'active-rerender-focus-pulse') {
+        rerenderWysiwygDOM({ allowDuringComposition: true, force: true });
+        target.blur();
+        recordChaos('active-rerender-focus-pulse-blur');
+        target.focus();
+        if (before.selection_focus != null) {
+          setTextSelectionByOffset(before.selection_focus);
+        }
+      }
+
+      recordChaos('idle-after', {
+        before_selection_start: before.selection_start,
+        before_selection_end: before.selection_end,
+      });
+    }
+
+    function scheduleIdleMaintenance() {
+      if (!editorChaos) {
+        return;
+      }
+
+      clearTimeout(idleTimer);
+      idleTimer = setTimeout(idleEditorMaintenance, chaosDelayMilliseconds);
+    }
+
     function record(event) {
       const eventTimestamp = Number(event.timeStamp ?? performance.now());
       const wallClockTimestamp = new Date(performance.timeOrigin + eventTimestamp).toISOString();
+      const selection = selectionState();
 
       window.__hisleEvents.push({
         sequence: ++window.__hisleEventSequence,
@@ -198,19 +651,114 @@ async function installTestPage(targetPage) {
         data: eventValue(event, 'data'),
         input_type: eventValue(event, 'inputType'),
         is_composing: eventValue(event, 'isComposing'),
-        value: textarea.value,
-        selection_start: textarea.selectionStart,
-        selection_end: textarea.selectionEnd,
+        value: targetValue(),
+        selection_start: selection.selection_start,
+        selection_end: selection.selection_end,
+        selection_anchor: selection.selection_anchor,
+        selection_focus: selection.selection_focus,
         active_element: activeElementIdentity(),
       });
+
+      if (event.type === 'input' || event.type === 'compositionupdate' || event.type === 'compositionend') {
+        scheduleIdleMaintenance();
+      }
     }
 
     for (const type of eventTypes) {
       document.addEventListener(type, record, { capture: true });
     }
 
-    textarea.focus();
-    window.__hisleReady = document.activeElement === textarea;
+    if (initialRender === 'spans') {
+      rerenderWysiwygDOM({ force: true });
+    } else if (initialRender === 'paragraphs') {
+      renderParagraphDOM(targetValue());
+    }
+
+    target.addEventListener('compositionstart', () => {
+      target.dataset.composing = '1';
+    });
+    target.addEventListener('compositionend', () => {
+      target.dataset.composing = '0';
+      rerenderWysiwygDOM({ force: forceRenderOnCompositionEnd });
+      compositionEndCount += 1;
+      if (compositionEndCount === 1 &&
+          moveAfterCompositionCaret != null &&
+          Number.isFinite(moveAfterCompositionCaret)) {
+        setTimeout(() => {
+          setTextSelectionByOffset(moveAfterCompositionCaret);
+          recordChaos('move-after-composition', {
+            target_selection_offset: moveAfterCompositionCaret,
+            composition_end_count: compositionEndCount,
+          });
+        }, 50);
+      }
+    });
+    target.addEventListener('input', () => rerenderWysiwygDOM());
+    target.addEventListener('input', () => {
+      inputCount += 1;
+      if (inputCount === 1 &&
+          moveAfterInputCaret != null &&
+          Number.isFinite(moveAfterInputCaret)) {
+        setTimeout(() => {
+          setTextSelectionByOffset(moveAfterInputCaret);
+          recordChaos('move-after-input', {
+            target_selection_offset: moveAfterInputCaret,
+            input_count: inputCount,
+            composing: target.dataset.composing === '1',
+          });
+        }, 50);
+      }
+    });
+
+    target.focus();
+    if (initialCaret != null && Number.isFinite(initialCaret)) {
+      setTextSelectionByOffset(initialCaret);
+    } else if (!isTextarea && initialText) {
+      const selection = window.getSelection();
+      const range = document.createRange();
+      range.selectNodeContents(target);
+      range.collapse(false);
+      selection.removeAllRanges();
+      selection.addRange(range);
+    }
+    const selection = selectionState();
+    const caretClientPoint = textPositionForOffset(selection.selection_focus ?? targetValue().length);
+    const clickAfterInputClientPoint = clickAfterInputCaret != null && Number.isFinite(clickAfterInputCaret)
+      ? textPositionForOffset(clickAfterInputCaret)
+      : null;
+    window.__hisleInitialState = {
+      value: targetValue(),
+      html: isTextarea ? null : target.innerHTML,
+      selection_start: selection.selection_start,
+      selection_end: selection.selection_end,
+      selection_anchor: selection.selection_anchor,
+      selection_focus: selection.selection_focus,
+      active_element: activeElementIdentity(),
+      viewport: {
+        inner_width: window.innerWidth,
+        inner_height: window.innerHeight,
+        outer_width: window.outerWidth,
+        outer_height: window.outerHeight,
+        screen_x: window.screenX,
+        screen_y: window.screenY,
+      },
+      caret_client_point: caretClientPoint,
+      estimated_screen_point: estimatedScreenPointForClientPoint(caretClientPoint),
+      click_after_input_client_point: clickAfterInputClientPoint,
+      click_after_input_screen_point: estimatedScreenPointForClientPoint(clickAfterInputClientPoint),
+    };
+    window.__hisleReady = document.activeElement === target;
+  }, {
+    kind: targetKind,
+    initialText,
+    initialCaretText,
+    initialRender,
+    moveAfterCompositionCaretText,
+    moveAfterInputCaretText,
+    clickAfterInputCaretText,
+    forceRenderOnCompositionEnd,
+    editorChaos,
+    chaosDelayMilliseconds,
   });
 
   await targetPage.waitForFunction(() => window.__hisleReady === true);
@@ -263,6 +811,7 @@ async function startServer() {
 
 async function writeReadyFile() {
   const browser = context.browser();
+  const initialState = page ? await page.evaluate(() => window.__hisleInitialState ?? null) : null;
   const ready = {
     ok: true,
     run_id: runId,
@@ -272,6 +821,16 @@ async function writeReadyFile() {
     chrome_path: chromePath || null,
     chrome_version: browser ? browser.version() : null,
     remote_debugging_port: remoteDebuggingPort || null,
+    target_kind: targetKind,
+    initial_text: initialText,
+    initial_caret: initialCaretText || null,
+    initial_render: initialRender,
+    move_after_composition_caret: moveAfterCompositionCaretText || null,
+    move_after_input_caret: moveAfterInputCaretText || null,
+    force_render_on_composition_end: forceRenderOnCompositionEnd,
+    editor_chaos: editorChaos || null,
+    chaos_delay_milliseconds: chaosDelayMilliseconds,
+    initial_state: initialState,
     user_data_dir: userDataDir,
   };
   await fs.writeFile(readyFile, `${JSON.stringify(ready, null, 2)}\n`, 'utf8');
@@ -302,27 +861,84 @@ async function finalize({ reason, driverExitCode }) {
 
   const domEvents = page ? await page.evaluate(() => window.__hisleEvents ?? []) : [];
   await writeJSONLines(path.join(runDir, 'dom-events.jsonl'), domEvents);
+  const chaosEvents = page ? await page.evaluate(() => window.__hisleChaosEvents ?? []) : [];
+  await writeJSONLines(path.join(runDir, 'editor-chaos.jsonl'), chaosEvents);
 
-  const finalState = page ? await page.evaluate((expected) => {
-    const textarea = document.getElementById('target');
+  const finalState = page ? await page.evaluate(({ expected, initialRender }) => {
+    const target = document.getElementById('target');
+    const isTextarea = target instanceof HTMLTextAreaElement;
     const active = document.activeElement;
     const activeElement = active ? {
       tagName: active.tagName,
       id: active.id || null,
       name: active.getAttribute('name'),
     } : null;
+
+    function textOffset(container, offset) {
+      if (!container || !target.contains(container)) {
+        return null;
+      }
+
+      const range = document.createRange();
+      range.selectNodeContents(target);
+      try {
+        range.setEnd(container, offset);
+      } catch {
+        return null;
+      }
+      return range.toString().length;
+    }
+
+    function selectionState() {
+      if (isTextarea) {
+        return {
+          selection_start: target.selectionStart,
+          selection_end: target.selectionEnd,
+        };
+      }
+
+      const selection = window.getSelection();
+      if (!selection || selection.rangeCount === 0) {
+        return {
+          selection_start: null,
+          selection_end: null,
+        };
+      }
+
+      const range = selection.getRangeAt(0);
+      return {
+        selection_start: textOffset(range.startContainer, range.startOffset),
+        selection_end: textOffset(range.endContainer, range.endOffset),
+      };
+    }
+
+    function targetValue() {
+      if (!isTextarea && initialRender === 'paragraphs') {
+        const lines = Array.from(target.querySelectorAll('[data-line]'));
+        if (lines.length > 0) {
+          return lines.map((line) => line.textContent ?? '').join('\n');
+        }
+      }
+      return isTextarea ? target.value : target.textContent ?? '';
+    }
+
+    const selection = selectionState();
+    const value = targetValue();
+
     return {
       wall_clock_timestamp: new Date().toISOString(),
       performance_now: performance.now(),
-      value: textarea.value,
-      selection_start: textarea.selectionStart,
-      selection_end: textarea.selectionEnd,
+      value,
+      html: isTextarea ? null : target.innerHTML,
+      selection_start: selection.selection_start,
+      selection_end: selection.selection_end,
       active_element: activeElement,
       event_count: window.__hisleEvents?.length ?? 0,
+      chaos_event_count: window.__hisleChaosEvents?.length ?? 0,
       expected_value: expected,
-      matches_expected_value: textarea.value === expected,
+      matches_expected_value: value === expected,
     };
-  }, expectedValue) : {
+  }, { expected: expectedValue, initialRender }) : {
     wall_clock_timestamp: new Date().toISOString(),
     value: '',
     expected_value: expectedValue,
@@ -331,6 +947,7 @@ async function finalize({ reason, driverExitCode }) {
 
   finalState.reason = reason;
   finalState.driver_exit_code = driverExitCode;
+  finalState.anomalies = analyzeEvents(domEvents);
 
   await fs.writeFile(
     path.join(runDir, 'final-state.json'),
@@ -351,14 +968,96 @@ async function finalize({ reason, driverExitCode }) {
   }
 
   const ok = driverExitCode === 0 && finalState.matches_expected_value === true;
+  const effectiveOk = driverExitCode === 0 && (allowMismatch || finalState.matches_expected_value === true);
   return {
-    ok,
+    ok: effectiveOk,
     reason,
     driver_exit_code: driverExitCode,
+    allow_mismatch: allowMismatch,
     matches_expected_value: finalState.matches_expected_value,
     value: finalState.value,
     expected_value: expectedValue,
     event_count: finalState.event_count,
+  };
+}
+
+function analyzeEvents(events) {
+  const focusLost = [];
+  const nullSelections = [];
+  const jumpsWithoutValueChange = [];
+  const regressions = [];
+  let previous = null;
+  let maxSelection = null;
+
+  for (const event of events) {
+    const activeID = event.active_element?.id ?? null;
+    if (event.event_type === 'blur' || (event.active_element && activeID !== 'target')) {
+      focusLost.push(sampleEvent(event));
+    }
+
+    if (event.selection_start == null || event.selection_end == null) {
+      nullSelections.push(sampleEvent(event));
+    }
+
+    const selection = event.selection_start;
+    const valueLength = String(event.value ?? '').length;
+    if (typeof selection === 'number') {
+      if (maxSelection != null && valueLength >= (previous?.valueLength ?? 0) && selection < maxSelection - 2) {
+        regressions.push({
+          ...sampleEvent(event),
+          previous_max_selection: maxSelection,
+        });
+      }
+      maxSelection = maxSelection == null ? selection : Math.max(maxSelection, selection);
+    }
+
+    if (
+      previous &&
+      event.event_type === 'selectionchange' &&
+      typeof selection === 'number' &&
+      typeof previous.selection === 'number' &&
+      valueLength === previous.valueLength &&
+      Math.abs(selection - previous.selection) > 1
+    ) {
+      jumpsWithoutValueChange.push({
+        ...sampleEvent(event),
+        previous_sequence: previous.sequence,
+        previous_selection_start: previous.selection,
+        delta: selection - previous.selection,
+      });
+    }
+
+    previous = {
+      sequence: event.sequence,
+      selection,
+      valueLength,
+    };
+  }
+
+  return {
+    focus_lost_count: focusLost.length,
+    null_selection_count: nullSelections.length,
+    selection_jump_without_value_change_count: jumpsWithoutValueChange.length,
+    selection_regression_count: regressions.length,
+    focus_lost_samples: focusLost.slice(0, 12),
+    null_selection_samples: nullSelections.slice(0, 12),
+    selection_jump_without_value_change_samples: jumpsWithoutValueChange.slice(0, 12),
+    selection_regression_samples: regressions.slice(0, 12),
+  };
+}
+
+function sampleEvent(event) {
+  return {
+    sequence: event.sequence,
+    event_type: event.event_type,
+    key: event.key,
+    data: event.data,
+    input_type: event.input_type,
+    is_composing: event.is_composing,
+    value_length: String(event.value ?? '').length,
+    selection_start: event.selection_start,
+    selection_end: event.selection_end,
+    active_element: event.active_element,
   };
 }
 

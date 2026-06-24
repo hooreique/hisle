@@ -7,6 +7,7 @@ const observer_source = "tools/chrome-ime/observer.mjs"
 const expected_artifacts = [
     "keys.jsonl",
     "dom-events.jsonl",
+    "editor-chaos.jsonl",
     "ime.log",
     "final-state.json",
     "screenshot.png",
@@ -65,6 +66,21 @@ cd $root_dir
 
 let seed = ($env.SEED? | default "1")
 let iterations = ($env.ITERATIONS? | default "1")
+let target_kind = ($env.HISLE_CHROME_TARGET? | default "textarea")
+let scenario = ($env.HISLE_CHROME_SCENARIO? | default "standard")
+let initial_text = ($env.HISLE_CHROME_INITIAL_TEXT? | default "")
+let initial_caret = ($env.HISLE_CHROME_INITIAL_CARET? | default "")
+let initial_render = ($env.HISLE_CHROME_INITIAL_RENDER? | default "")
+let move_after_composition_caret = ($env.HISLE_CHROME_MOVE_AFTER_COMPOSITION_CARET? | default "")
+let move_after_input_caret = ($env.HISLE_CHROME_MOVE_AFTER_INPUT_CARET? | default "")
+let click_after_input_caret = ($env.HISLE_CHROME_CLICK_AFTER_INPUT_CARET? | default "")
+let force_render_on_composition_end = ($env.HISLE_CHROME_FORCE_RENDER_ON_COMPOSITION_END? | default "")
+let editor_chaos = ($env.HISLE_CHROME_EDITOR_CHAOS? | default "")
+let chaos_delay = ($env.HISLE_CHROME_CHAOS_DELAY_MS? | default "")
+let allow_mismatch = ($env.HISLE_CHROME_ALLOW_MISMATCH? | default "")
+let expected_value = ($env.EXPECTED_VALUE? | default "")
+let skip_focus_click = ($env.HISLE_CHROME_SKIP_FOCUS_CLICK? | default "")
+let click_initial_caret = ($env.HISLE_CHROME_CLICK_INITIAL_CARET? | default "")
 let run_id_env = ($env.RUN_ID? | default "")
 let run_id = if ($run_id_env | is-empty) {
     $"(date now | format date "%Y%m%d-%H%M%S")-(random chars --length 6)"
@@ -129,6 +145,18 @@ let observer_job = job spawn --description "hisle chrome ime observer" {
             CHROME_REMOTE_DEBUGGING_PORT: $remote_debugging_port
             CHROME_PATH: $chrome_path
             ITERATIONS: $iterations
+            EXPECTED_VALUE: $expected_value
+            HISLE_CHROME_TARGET: $target_kind
+            HISLE_CHROME_INITIAL_TEXT: $initial_text
+            HISLE_CHROME_INITIAL_CARET: $initial_caret
+            HISLE_CHROME_INITIAL_RENDER: $initial_render
+            HISLE_CHROME_MOVE_AFTER_COMPOSITION_CARET: $move_after_composition_caret
+            HISLE_CHROME_MOVE_AFTER_INPUT_CARET: $move_after_input_caret
+            HISLE_CHROME_CLICK_AFTER_INPUT_CARET: $click_after_input_caret
+            HISLE_CHROME_FORCE_RENDER_ON_COMPOSITION_END: $force_render_on_composition_end
+            HISLE_CHROME_EDITOR_CHAOS: $editor_chaos
+            HISLE_CHROME_CHAOS_DELAY_MS: $chaos_delay
+            HISLE_CHROME_ALLOW_MISMATCH: $allow_mismatch
             HISLE_CHROME_KEEP_OPEN: $keep_open
         } {
             ^node $observer_source
@@ -157,7 +185,20 @@ if not $ready_response.ok {
 
 print "Running Swift HID driver..."
 let driver_result = do {
-    ^$driver_output --run-dir $run_dir --ready-file $ready_file --seed $seed --iterations $iterations
+    with-env {
+        HISLE_CHROME_TARGET: $target_kind
+        HISLE_CHROME_SCENARIO: $scenario
+        HISLE_CHROME_DELAY_MIN_MS: ($env.HISLE_CHROME_DELAY_MIN_MS? | default "")
+        HISLE_CHROME_DELAY_MAX_MS: ($env.HISLE_CHROME_DELAY_MAX_MS? | default "")
+        HISLE_CHROME_IDLE_MS: ($env.HISLE_CHROME_IDLE_MS? | default "")
+        HISLE_CHROME_SKIP_FOCUS_CLICK: $skip_focus_click
+        HISLE_CHROME_CLICK_INITIAL_CARET: $click_initial_caret
+        HISLE_CHROME_CLICK_SCREEN_DX: ($env.HISLE_CHROME_CLICK_SCREEN_DX? | default "")
+        HISLE_CHROME_CLICK_SCREEN_DY: ($env.HISLE_CHROME_CLICK_SCREEN_DY? | default "")
+        EXPECTED_VALUE: $expected_value
+    } {
+        ^$driver_output --run-dir $run_dir --ready-file $ready_file --seed $seed --iterations $iterations
+    }
 } | complete
 
 $driver_result.stdout | save --force $driver_stdout_file
@@ -199,6 +240,20 @@ let driver_state = if ($driver_state_file | path exists) {
     run_id: $run_id
     seed: ($seed | into int)
     iteration_count: ($iterations | into int)
+    target_kind: $target_kind
+    scenario: $scenario
+    initial_text: $initial_text
+    initial_caret: (maybe-null $initial_caret)
+    initial_render: (maybe-null $initial_render)
+    move_after_composition_caret: (maybe-null $move_after_composition_caret)
+    move_after_input_caret: (maybe-null $move_after_input_caret)
+    force_render_on_composition_end: ($force_render_on_composition_end == "1")
+    editor_chaos: $editor_chaos
+    chaos_delay_milliseconds: (maybe-null $chaos_delay)
+    allow_mismatch: ($allow_mismatch == "1")
+    expected_value_override: (maybe-null $expected_value)
+    skip_focus_click: ($skip_focus_click == "1")
+    click_initial_caret: ($click_initial_caret == "1")
     macos_version: $macos_version
     chrome_path: (maybe-null $chrome_path)
     chrome_version: (if not ($ready.chrome_version? | default "" | is-empty) { $ready.chrome_version } else { maybe-null $chrome_version })

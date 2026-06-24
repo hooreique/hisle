@@ -14,9 +14,11 @@ enum KeyboardLayoutOverride {
     static func installColemak(for client: Any?, logSuccess: Bool = false) -> Bool {
         if let textInput = client as? IMKTextInput {
             textInput.overrideKeyboard(withKeyboardNamed: colemakInputSourceID)
+#if DEBUG
             if logSuccess {
                 logger.notice("requested keyboard layout override via IMK client: \(colemakInputSourceID, privacy: .public)")
             }
+#endif
             return true
         }
 
@@ -40,9 +42,11 @@ enum KeyboardLayoutOverride {
             return false
         }
 
+#if DEBUG
         if logSuccess {
             logger.notice("set keyboard layout override through TIS: \(colemakInputSourceID, privacy: .public)")
         }
+#endif
         return true
     }
 }

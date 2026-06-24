@@ -93,11 +93,12 @@ Known non-issues:
   metadata or no AppIntents dependency found. Treat them as noise unless the
   build fails.
 
-## Chrome Textarea IME Reproduction
+## Chrome IME Reproduction
 
-Use this as a diagnostic tool for Chrome `<textarea>` behavior that must pass
-through the real macOS input method path. Playwright launches and observes
-Chrome, but all typing is sent by the Swift HID driver.
+Use this as a diagnostic tool for Chrome `<textarea>`, `contenteditable`, and
+WYSIWYG behavior that must pass through the real macOS input method path.
+Playwright launches and observes Chrome, but all typing is sent by the Swift HID
+driver.
 
 Preferred command:
 
@@ -119,6 +120,38 @@ Useful environment options:
 - `CHROME_PATH`, optional path to Chrome or Chrome for Testing.
 - `CHROME_REMOTE_DEBUGGING_PORT`, optional fixed Chrome remote debugging port.
 - `HISLE_CHROME_KEEP_OPEN=1`, leave Chrome open after artifact capture.
+- `HISLE_CHROME_TARGET`, one of `textarea`, `contenteditable`, or `wysiwyg`;
+  default `textarea`.
+- `HISLE_CHROME_SCENARIO`, one of `standard`, `click-during-composition`,
+  `idle-stress`, `midline-insert`, `two-insert-move`,
+  `active-move-continue`, or `click-move-continue`; default `standard`.
+- `HISLE_CHROME_EDITOR_CHAOS`, optional WYSIWYG editor maintenance simulation:
+  `idle-normalize`, `focus-pulse`, `active-rerender`, or
+  `active-rerender-focus-pulse`.
+- `HISLE_CHROME_IDLE_MS`, `HISLE_CHROME_CHAOS_DELAY_MS`, and
+  `HISLE_CHROME_DELAY_MIN_MS`/`HISLE_CHROME_DELAY_MAX_MS` tune the HID and idle
+  timings.
+- `HISLE_CHROME_INITIAL_TEXT` and `HISLE_CHROME_INITIAL_CARET` seed the target
+  text and caret offset.
+- `HISLE_CHROME_INITIAL_RENDER`, one of `text`, `spans`, or `paragraphs`;
+  `paragraphs` maps newline-separated WYSIWYG text to `<p data-line>` blocks.
+- `HISLE_CHROME_MOVE_AFTER_COMPOSITION_CARET` and
+  `HISLE_CHROME_MOVE_AFTER_INPUT_CARET` move the DOM selection during active
+  composition without using Playwright for text entry. Use these to reproduce
+  editor-side selection drift.
+- `HISLE_CHROME_CLICK_AFTER_INPUT_CARET` gives the driver a post-composition
+  caret target for the `click-move-continue` scenario. If Chrome screen-point
+  estimation is off in the local environment, tune the HID click with
+  `HISLE_CHROME_CLICK_SCREEN_DX` and `HISLE_CHROME_CLICK_SCREEN_DY`.
+- `HISLE_CHROME_SKIP_FOCUS_CLICK=1` skips the initial window-center focus
+  click after Chrome is already frontmost.
+- `HISLE_CHROME_CLICK_INITIAL_CARET=1` asks the driver to click the observer's
+  initial caret screen point before typing.
+- `HISLE_CHROME_FORCE_RENDER_ON_COMPOSITION_END=1` asks the WYSIWYG fixture to
+  re-render after composition ends.
+- `EXPECTED_VALUE` overrides the final-value assertion.
+- `HISLE_CHROME_ALLOW_MISMATCH=1` keeps the run successful while preserving the
+  observed mismatch in artifacts; use this for destructive repro scenarios.
 
 Artifacts are written under `build/chrome-ime/<run-id>/`:
 
@@ -126,9 +159,10 @@ Artifacts are written under `build/chrome-ime/<run-id>/`:
   timestamps, key codes, flags, and planned delay.
 - `dom-events.jsonl`: capture-phase DOM keyboard, composition, input,
   selection, focus, and blur events.
+- `editor-chaos.jsonl`: editor maintenance events for WYSIWYG chaos scenarios.
 - `ime.log`: unified log stream for `hooreique.inputmethod.hisle`.
-- `final-state.json`: final textarea value, selection, expected value, and
-  match result.
+- `final-state.json`: final value, HTML for non-textarea targets, selection,
+  expected value, match result, and anomaly counters.
 - `screenshot.png`: final browser screenshot.
 - `trace.zip`: Playwright trace.
 - `environment.json`: run metadata, tool versions, selected input source, and
@@ -140,3 +174,25 @@ Triage guide:
 - Good IME logs with bad DOM events or textarea value points at the
   Chrome/macOS/browser interaction.
 - Good DOM events followed by later value mutation points at page JavaScript.
+
+### Debug Client Range Trace
+
+Debug builds can emit opt-in `IMKTextInput` range traces for cursor and marked
+text bugs. The trace records stage names, `selectedRange`, `markedRange`,
+replacement range decisions, and marked-text lengths. It does not log raw input
+text, and it is compiled out of Release builds.
+
+Enable it for an installed Debug build:
+
+```sh
+defaults write hooreique.inputmethod.hisle traceClientRanges -bool YES
+```
+
+Disable it after the run:
+
+```sh
+defaults delete hooreique.inputmethod.hisle traceClientRanges
+```
+
+For directly launched debug processes, `HISLE_TRACE_CLIENT_RANGES=1` enables the
+same trace.

@@ -14,7 +14,6 @@ final class InputMethodServer {
         }
 
         server = IMKServer(name: connectionName, bundleIdentifier: bundle.bundleIdentifier)
-        NSLog("hisle server started: connection=\(connectionName) bundle=\(bundle.bundleIdentifier ?? "")")
         logger.notice("server started: connection=\(connectionName, privacy: .public) bundle=\(bundle.bundleIdentifier ?? "", privacy: .public)")
     }
 }

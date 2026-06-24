@@ -73,6 +73,10 @@
   `make chrome-ime-repro`
 - Direct Chrome textarea IME reproduction tool, after a debug install:
   `nix develop .#browser-work --command -- nu tools/chrome_ime_repro.nu`
+- Enable debug-only IMK client range tracing for an installed Debug build:
+  `defaults write hooreique.inputmethod.hisle traceClientRanges -bool YES`
+- Disable debug-only IMK client range tracing:
+  `defaults delete hooreique.inputmethod.hisle traceClientRanges`
 - Installed companion CLI, after a debug install:
   `"$HOME/Library/Input Methods/hisle.app/Contents/Helpers/hisle"`
   Without options it prints `roman` or `hangul`; `--version` prints both the
@@ -96,12 +100,18 @@
   mode switching, modifier handling, shortcut forwarding, or bundled CLI
   behavior changes, run `make gui-smoke-test` when the local GUI prerequisites
   are available.
-- For Chrome `<textarea>` IME diagnostics, run `make chrome-ime-repro` when the
-  local GUI prerequisites are available. The Chrome diagnostic runner types only
-  through the Swift HID driver and real macOS input method path; Playwright is
-  limited to launching or observing Chrome, DOM event capture, screenshots, and
-  traces. Do not use Playwright keyboard APIs, `fill()`, or CDP text insertion
-  for the actual typing under test.
+- For Chrome IME diagnostics, run `make chrome-ime-repro` when the local GUI
+  prerequisites are available. The Chrome diagnostic runner types only through
+  the Swift HID driver and real macOS input method path; Playwright is limited
+  to launching or observing Chrome, DOM event capture, screenshots, and traces.
+  Do not use Playwright keyboard APIs, `fill()`, or CDP text insertion for the
+  actual typing under test.
+- The Chrome diagnostic runner can also target `contenteditable` and WYSIWYG
+  surfaces with `HISLE_CHROME_TARGET`; use `HISLE_CHROME_EDITOR_CHAOS` scenarios
+  to reproduce idle-time editor DOM rewrites or focus churn. For cursor
+  divergence experiments, prefer prefilled WYSIWYG runs with
+  `HISLE_CHROME_INITIAL_TEXT`, `HISLE_CHROME_INITIAL_CARET`, and explicit move
+  scenarios so the DOM selection and IMK marked range can be compared.
 - For the GUI smoke test, follow `docs/testing.md`. The scripted driver opens a
   temporary file in Sublime Text, streams `hisle` logs, verifies mode changes
   through the bundled CLI, sends the documented GUI key sequence including
@@ -110,6 +120,10 @@
   Each run expects Accessibility permission for the terminal process, an
   installed Chrome or `CHROME_PATH`, and a clean per-run Chrome profile managed
   by the observer sidecar.
+- Debug builds can opt into noisy IMK client range traces with the
+  `traceClientRanges` defaults key or `HISLE_TRACE_CLIENT_RANGES=1`. Release
+  builds must not emit these traces; keep any Release logging limited to sparse
+  lifecycle or unexpected fallback events.
 - Local app builds are written under `build/` with `SYMROOT`, not Xcode's
   default DerivedData location.
 - Use the pinned Swift from `flake.nix` for Swift and SwiftPM work. Always run

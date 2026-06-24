@@ -9,5 +9,7 @@ private let appDelegate = AppDelegate()
 let app = NSApplication.shared
 app.delegate = appDelegate
 
+#if DEBUG
 NSLog("hisle main started")
+#endif
 app.run()
