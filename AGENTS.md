@@ -64,6 +64,8 @@
   `nix develop --command -- nu tools/install_debug.nu`
 - Direct DMG package script:
   `nix develop --command -- nu tools/package_dmg.nu`
+- Direct notarization and staple script for a signed DMG:
+  `nix develop --command -- nu tools/notary.nu`
 - Direct uninstall script: `nix develop --command -- nu tools/uninstall.nu`
 - GUI smoke test:
   `make gui-smoke-test`
@@ -152,6 +154,13 @@
   credentials. For Developer ID packaging, pass Xcode signing overrides such as
   `CODE_SIGN_STYLE`, `CODE_SIGN_IDENTITY`, and `DEVELOPMENT_TEAM`; pass
   `DMG_SIGN_IDENTITY` to sign the disk image itself.
+- Keep local release credentials under ignored `local/`, not in the repository
+  root. `tools/notary.nu` reads notary credentials from environment variables
+  (`NOTARY_API_KEY_PATH`, `NOTARY_API_KEY_ID`, `NOTARY_API_ISSUER_ID`) or from
+  one-value local files (`local/notary-api-key-path`,
+  `local/notary-api-key-id`, and `local/notary-api-issuer-id`), so CI can reuse
+  the same script without checking in local secrets. The script stores the last
+  local submission ID in `local/current-notary-submission-id`.
 - Xcode-oriented Make targets call `/usr/bin/xcodebuild` through an environment
   scrubber that clears Nix compiler, linker, and SDK variables such as `CC`,
   `CXX`, `LD`, and `SDKROOT`. Preserve that boundary when changing Xcode build

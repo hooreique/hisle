@@ -27,5 +27,6 @@ xcuserdata/
 node_modules
 
 # Local environment overrides
+local
 .envrc.local
 AGENTS.local.md

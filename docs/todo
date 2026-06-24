@@ -4,10 +4,11 @@
 
 ## Binary Release
 
-- [ ] Apple Developer Program 가입
-- [ ] Developer ID Application 인증서 준비
-- [ ] Developer ID로 서명된 Release DMG 만들기
-- [ ] DMG를 Apple notary service에 제출하고 결과 확인
+- [x] Apple Developer Program 가입
+- [x] Developer ID Application 인증서 준비
+- [x] Developer ID로 서명된 Release DMG 만들기
+- [ ] DMG를 Apple notary service에 제출하고 Accepted 결과 확인
+  - 현재 submission: `local/current-notary-submission-id`
 - [ ] notarization ticket을 DMG에 staple
 - [ ] 다운로드된 DMG 기준으로 `codesign`, `stapler`, `spctl` 검증
 
