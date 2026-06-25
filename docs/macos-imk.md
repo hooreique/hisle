@@ -1,0 +1,111 @@
+# macOS IMK
+
+This document covers the macOS app, InputMethodKit integration, input source
+metadata, mode switching, shortcut forwarding, and the bundled companion CLI.
+Read it before changing `hisle/App/`, `hisle/InputMethod/`, `hisle/Info.plist`,
+`hisle-cli/`, or input-mode behavior.
+
+## Scope
+
+- `hisle/App/` contains the app lifecycle and input-method server startup.
+- `hisle/InputMethod/` contains the InputMethodKit controller and server code.
+- `hisle/Info.plist` contains input method metadata consumed by macOS.
+- `hisle-cli/` contains the companion command-line helper bundled into
+  `hisle.app/Contents/Helpers/hisle`.
+- Keep InputMethodKit-specific code thin. Put testable Hangul composition
+  behavior in `hisle-core/` where possible.
+
+## Input Modes
+
+Read `docs/input-modes.md` before changing input-mode state, left/right Shift
+handling, Escape behavior, host action forwarding, shortcut forwarding, or the
+boundary between Roman mode and Hangul mode.
+
+The current visible input source is `hisle`. It starts in Roman mode with
+Colemak output, uses Cole Sebeol in Hangul mode, and leaves command/control
+shortcuts to the host app after flushing active composition.
+
+Treat left Shift single tap as Roman mode selection and right Shift single tap
+as Hangul mode selection, as specified in `docs/input-modes.md`.
+
+Keep the current public input source focused on `hisle`. Add other visible
+modes only after their user-facing behavior is specified.
+
+Keep the top-level `TISInputSourceID` as the parent input method ID
+(`hooreique.inputmethod.hisle`) and the visible mode ID as
+`hooreique.inputmethod.hisle.main`; using the same ID for both creates duplicate
+TIS entries.
+
+## Commands
+
+Build the macOS input method app:
+
+```sh
+nix develop .#xcode-work --command -- make build
+```
+
+Debug install into `~/Library/Input Methods`:
+
+```sh
+make install-debug
+```
+
+Direct debug install script:
+
+```sh
+nix develop --command -- nu tools/install_debug.nu
+```
+
+Remove the local debug install:
+
+```sh
+make uninstall
+```
+
+Direct uninstall script:
+
+```sh
+nix develop --command -- nu tools/uninstall.nu
+```
+
+Do not run the input method directly from Xcode as the primary test path. Build
+it, install it into `~/Library/Input Methods`, then select it as an input source
+in System Settings.
+
+For InputMethodKit, mode switching, modifier handling, shortcut forwarding, or
+bundled CLI behavior changes, run `make gui-smoke-test` when the local GUI
+prerequisites are available. The GUI smoke test details live in
+`docs/testing.md`.
+
+## Companion CLI
+
+Installed helper path after a debug install:
+
+```sh
+"$HOME/Library/Input Methods/hisle.app/Contents/Helpers/hisle"
+```
+
+Without options it prints `roman` or `hangul`; `--version` prints both the app
+version and `hisle-core` version. Debug CLI builds append `-debug` to the
+displayed app version.
+
+When changing `hisle-cli`, update this Companion CLI section and the GUI smoke
+test expectations if the command-line contract changes. The bundled helper's
+no-option output is part of the smoke test.
+
+## Logging
+
+Debug builds can opt into noisy IMK client range traces with the
+`traceClientRanges` defaults key or `HISLE_TRACE_CLIENT_RANGES=1`; see
+`docs/testing.md`.
+
+Release builds must not emit these traces. Keep any Release logging limited to
+sparse lifecycle or unexpected fallback events.
+
+## References
+
+- Use `../gureum` (https://github.com/gureum/gureum) as the reference for app
+  implementation and InputMethodKit behavior.
+- The path above is a default relative to this repository. Developer
+  environments may use a different path or may not have the repository. If it
+  does not exist, check `AGENTS.local.md` for local reference paths.

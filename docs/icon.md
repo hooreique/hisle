@@ -1,4 +1,4 @@
-# Two Icons
+# Icon
 
 `hisle` has two different icons. Do not mix them up when cleaning up or
 rerendering icon files.
@@ -32,9 +32,16 @@ TIS/InputMethodKit metadata.
 `HisleInputSource.svg` is the input method icon source. Do not use it as the app
 icon source.
 
+The visible input mode points `TISIconLabels.CustomIcon` at the PDF so modern
+macOS input menus can use the custom icon path, while the TIFF keys remain for
+legacy TIS callers.
+
 ## Work Rules
 
 - Before doing icon work, first decide which icon is changing.
+- Keep app-icon and input-method-icon sources, outputs, and metadata separate
+  in both documentation and implementation.
+- Icon rendering uses the `icon-work` Nix shell with `resvg` and ImageMagick.
 - `make icons` renders both the input method icon resources and the app icon
   fallback PNGs.
 - When changing the app icon, check both `hisle/AppIcon.icon/` and
@@ -48,6 +55,7 @@ icon source.
 
 ```sh
 make icons
+nix develop .#icon-work --command -- nu tools/render_icons.nu
 nix develop .#xcode-work --command -- make build
 ```
 
