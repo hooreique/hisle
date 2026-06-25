@@ -10,10 +10,7 @@ jobs:
     environment: release
     timeout-minutes: 75
     permissions:
-      contents: read
-
-    env:
-      DMG_PATH: build/dist/hisle-0.1.0.dmg
+      contents: write
 
     steps:
       - name: Checkout
@@ -70,6 +67,45 @@ jobs:
             DMG_SIGN_IDENTITY="$DMG_SIGN_IDENTITY" \
             OTHER_CODE_SIGN_FLAGS="$OTHER_CODE_SIGN_FLAGS"
 
+      - name: Export release metadata
+        id: release_metadata
+        run: |
+          set -euo pipefail
+
+          app_info_plist="build/Release/hisle.app/Contents/Info.plist"
+          app_version="$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$app_info_plist")"
+
+          if [[ ! "$app_version" =~ ^[0-9]+(\.[0-9]+){0,2}$ ]]; then
+            echo "::error::Invalid app version for release: $app_version"
+            exit 1
+          fi
+
+          release_tag="v$app_version"
+          dmg_name="hisle-$app_version.dmg"
+          dmg_path="build/dist/$dmg_name"
+          artifact_name="hisle-$app_version-dmg"
+
+          if [[ ! -f "$dmg_path" ]]; then
+            echo "::error::Missing expected DMG: $dmg_path"
+            exit 1
+          fi
+
+          {
+            echo "APP_VERSION=$app_version"
+            echo "RELEASE_TAG=$release_tag"
+            echo "DMG_NAME=$dmg_name"
+            echo "DMG_PATH=$dmg_path"
+            echo "DMG_ARTIFACT_NAME=$artifact_name"
+          } >> "$GITHUB_ENV"
+
+          {
+            echo "app_version=$app_version"
+            echo "release_tag=$release_tag"
+            echo "dmg_name=$dmg_name"
+            echo "dmg_path=$dmg_path"
+            echo "artifact_name=$artifact_name"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Prepare notary API key
         env:
           NOTARY_API_KEY_BASE64: ${{ secrets.NOTARY_API_KEY_BASE64 }}
@@ -107,9 +143,34 @@ jobs:
       - name: Upload DMG artifact
         uses: actions/upload-artifact@v4
         with:
-          name: hisle-0.1.0-dmg
-          path: ${{ env.DMG_PATH }}
+          name: ${{ steps.release_metadata.outputs.artifact_name }}
+          path: ${{ steps.release_metadata.outputs.dmg_path }}
           if-no-files-found: error
+
+      - name: Create draft GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          if git ls-remote --exit-code --tags origin "refs/tags/$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "::error::Tag $RELEASE_TAG already exists"
+            exit 1
+          fi
+
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "::error::Release $RELEASE_TAG already exists"
+            exit 1
+          fi
+
+          git tag "$RELEASE_TAG" "$GITHUB_SHA"
+          git push origin "refs/tags/$RELEASE_TAG"
+
+          gh release create "$RELEASE_TAG" "$DMG_PATH" \
+            --draft \
+            --verify-tag \
+            --title "$RELEASE_TAG" \
+            --notes ""
 
       - name: Delete temporary keychain
         if: always()

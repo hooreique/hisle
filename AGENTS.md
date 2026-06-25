@@ -25,6 +25,8 @@
   `hisle.app/Contents/Helpers/hisle`.
 - `hisle/App/` contains the app lifecycle and input-method server startup.
 - `hisle/InputMethod/` contains the InputMethodKit controller and server code.
+- `hisle/Config/` contains Xcode configuration files such as the app
+  distribution version.
 - `hisle/AppIcon.icon/` contains the Icon Composer app icon document used by
   modern macOS app icon rendering. Its foreground SVG is also the source for
   fallback app icon PNG slots.
@@ -33,8 +35,9 @@
 - `hisle/Resources/` contains bundled input method icon resources.
 - `hisle/Info.plist` contains input method metadata consumed by macOS.
 - `tools/` contains local Nushell build/install helpers.
-- `.github/workflows/release.yml` contains the manual GitHub Actions workflow
-  for building, notarizing, stapling, verifying, and uploading the release DMG.
+- `.github/workflows/release.yaml` contains the manual GitHub Actions workflow
+  for building, notarizing, stapling, verifying, uploading the release DMG as an
+  Actions artifact, and attaching it to a draft GitHub Release.
 - `docs/` contains development notes.
 - `docs/input-modes.md` specifies `hisle` input-mode behavior, including
   left/right Shift mode selection and the boundary between `hisle`, Colemak,
@@ -59,6 +62,7 @@
 - Render icon assets: `make icons`
 - Print active Xcode toolchain information:
   `nix develop .#xcode-work --command -- make check-toolchain`
+- Version ownership check: `make version-check`
 - Core build:
   `nix develop --ignore-environment --command -- swift build --quiet --package-path hisle-core`
 - Core contract/spec check: `make core-spec-check`
@@ -84,7 +88,8 @@
 - Installed companion CLI, after a debug install:
   `"$HOME/Library/Input Methods/hisle.app/Contents/Helpers/hisle"`
   Without options it prints `roman` or `hangul`; `--version` prints both the
-  app version and `hisle-core` version.
+  app version and `hisle-core` version. Debug CLI builds append `-debug` to the
+  displayed app version.
 - Direct icon render script:
   `nix develop .#icon-work --command -- nu tools/render_icons.nu`
 - Xcode-oriented dev shell:
@@ -161,7 +166,12 @@
   before creating the DMG.
 - The release GitHub Actions workflow is manual-dispatch only and uses the
   `release` Environment for Developer ID and notary credentials. When the runner
-  needs Nix, use `DeterminateSystems/determinate-nix-action@v3.21.2`.
+  needs Nix, use `DeterminateSystems/determinate-nix-action@v3.21.2`. The
+  workflow derives its GitHub Release tag and DMG asset name from the built
+  Release app's `CFBundleShortVersionString`, fails when the matching Git tag or
+  GitHub Release already exists, and creates a new draft GitHub Release only
+  after notarization, stapling, and verification pass. Publishing the draft
+  remains a manual GitHub UI action.
 - Keep local release credentials under ignored `local/`, not in the repository
   root. `tools/notary.nu` reads notary credentials from environment variables
   (`NOTARY_API_KEY_PATH`, `NOTARY_API_KEY_ID`, `NOTARY_API_ISSUER_ID`) or from
@@ -184,6 +194,12 @@
 - When changing `hisle-cli`, update the README CLI section and the GUI smoke
   test expectations if the command-line contract changes. The bundled helper's
   no-option output is part of the smoke test.
+- Keep app and core versions independent. The app distribution version lives in
+  `hisle/Config/HisleVersion.xcconfig` as `MARKETING_VERSION` and
+  `CURRENT_PROJECT_VERSION`; the `hisle-core` library version lives in
+  `hisle-core/Sources/HisleCore/HisleCoreVersion.swift` as `HisleCore.version`.
+  Do not require these versions to match. Use `make version-check` after version
+  ownership changes.
 - The debug install helper sets `DEVELOPER_DIR` to
   `/Applications/Xcode.app/Contents/Developer` when that path exists. Override
   that with `XCODE_DEVELOPER_DIR` when a different Xcode is required.

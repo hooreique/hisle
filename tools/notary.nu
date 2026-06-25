@@ -2,7 +2,28 @@ const root_dir = path self ..
 
 cd $root_dir
 
-let dmg_path = ($env.DMG_PATH? | default ([$root_dir "build" "dist" "hisle-0.1.0.dmg"] | path join))
+def app-marketing-version [] {
+    let version_path = [$root_dir "hisle" "Config" "HisleVersion.xcconfig"] | path join
+
+    if not ($version_path | path exists) {
+        error make { msg: $"Missing app version config: ($version_path)" }
+    }
+
+    let matches = (
+        open --raw $version_path
+        | lines
+        | where {|line| $line =~ '^\s*MARKETING_VERSION\s*=' }
+    )
+
+    if ($matches | length) != 1 {
+        error make { msg: $"Expected exactly one MARKETING_VERSION declaration in ($version_path)" }
+    }
+
+    $matches | first | split row "=" | get 1 | str trim
+}
+
+let default_dmg_path = [$root_dir "build" "dist" $"hisle-(app-marketing-version).dmg"] | path join
+let dmg_path = ($env.DMG_PATH? | default $default_dmg_path)
 let timeout = ($env.NOTARY_TIMEOUT? | default "30m")
 
 def local-value [name: string] {

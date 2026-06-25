@@ -38,8 +38,18 @@ private func printHelp() {
 }
 
 private func printVersion() {
-    print("hisle \(hisleVersion())")
+    print("hisle \(displayedHisleVersion())")
     print("hisle-core \(HisleCore.version)")
+}
+
+private func displayedHisleVersion() -> String {
+    let version = hisleVersion()
+
+    #if DEBUG
+    return version == "unknown" ? version : "\(version)-debug"
+    #else
+    return version
+    #endif
 }
 
 private func hisleVersion() -> String {
@@ -54,7 +64,7 @@ private func hisleVersion() -> String {
         return version
     }
 
-    return "0.1.0"
+    return "unknown"
 }
 
 private func containingAppBundle() -> Bundle? {

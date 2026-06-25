@@ -43,6 +43,7 @@
 		343DF4BF2FB300000080BE6F /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
 		343DF4C02FB300000080BE6F /* hisle */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = hisle; sourceTree = BUILT_PRODUCTS_DIR; };
 		343DF4B42FB100000080BE6F /* InputMethodKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = InputMethodKit.framework; path = System/Library/Frameworks/InputMethodKit.framework; sourceTree = SDKROOT; };
+		343DF4D02FB400000080BE6F /* HisleVersion.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = hisle/Config/HisleVersion.xcconfig; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -372,11 +373,11 @@
 		};
 		343DF4B12FB068A70080BE6F /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 343DF4D02FB400000080BE6F /* HisleVersion.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_DEBUG_DYLIB = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -387,7 +388,6 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 0.1.0;
 				OTHER_CODE_SIGN_FLAGS = "$(inherited) --options runtime";
 				PRODUCT_BUNDLE_IDENTIFIER = hooreique.inputmethod.hisle;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -401,12 +401,12 @@
 		};
 		343DF4B22FB068A70080BE6F /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 343DF4D02FB400000080BE6F /* HisleVersion.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_INJECT_BASE_ENTITLEMENTS = NO;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_DEBUG_DYLIB = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -417,7 +417,6 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 0.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = hooreique.inputmethod.hisle;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -430,10 +429,10 @@
 		};
 		343DF4C62FB300000080BE6F /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 343DF4D02FB400000080BE6F /* HisleVersion.xcconfig */;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
 				CREATE_INFOPLIST_SECTION_IN_BINARY = YES;
-				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_DEBUG_DYLIB = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -444,7 +443,6 @@
 					"@executable_path",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 0.1.0;
 				OTHER_CODE_SIGN_FLAGS = "$(inherited) --options runtime";
 				PRODUCT_BUNDLE_IDENTIFIER = hooreique.inputmethod.hisle.cli;
 				PRODUCT_MODULE_NAME = HisleCLI;
@@ -459,11 +457,11 @@
 		};
 		343DF4C72FB300000080BE6F /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 343DF4D02FB400000080BE6F /* HisleVersion.xcconfig */;
 			buildSettings = {
 				CODE_SIGN_INJECT_BASE_ENTITLEMENTS = NO;
 				CODE_SIGN_STYLE = Automatic;
 				CREATE_INFOPLIST_SECTION_IN_BINARY = YES;
-				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_DEBUG_DYLIB = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -474,7 +472,6 @@
 					"@executable_path",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 0.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = hooreique.inputmethod.hisle.cli;
 				PRODUCT_MODULE_NAME = HisleCLI;
 				PRODUCT_NAME = hisle;
