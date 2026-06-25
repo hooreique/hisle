@@ -6,7 +6,7 @@ on:
 jobs:
   build-notarize:
     name: Build, notarize, and staple DMG
-    runs-on: macos-15
+    runs-on: macos-26
     environment: release
     timeout-minutes: 75
     permissions:

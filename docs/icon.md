@@ -44,6 +44,10 @@ legacy TIS callers.
 - Icon rendering uses the `icon-work` Nix shell with `resvg` and ImageMagick.
 - `make icons` renders both the input method icon resources and the app icon
   fallback PNGs.
+- Build release app bundles with Xcode 26 or newer so `AppIcon.icon`
+  fill/background metadata is compiled into `AppIcon.icns`. Older Xcode
+  versions can fall back to legacy app icon behavior and produce a visually
+  different macOS app icon even when the PNG assets are unchanged.
 - When changing the app icon, check both `hisle/AppIcon.icon/` and
   `hisle/Assets.xcassets/AppIcon.appiconset/`.
 - When changing the input method icon, check `tools/icons/HisleInputSource.svg`,

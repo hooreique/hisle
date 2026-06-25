@@ -31,6 +31,12 @@ packaging. The DMG is the intended first binary distribution container, while
 notarization and stapling remain release-only steps that require Developer ID
 credentials.
 
+The release workflow runs on `macos-26` so GitHub Actions uses Xcode 26 for
+asset catalog compilation. Keep release packaging on Xcode 26 or newer unless
+the app icon output is revalidated; the app icon source is an `AppIcon.icon`
+document and older Xcode defaults can produce a different `AppIcon.icns` even
+when the icon image assets themselves are unchanged.
+
 For Developer ID packaging, pass Xcode signing overrides such as
 `CODE_SIGN_STYLE`, `CODE_SIGN_IDENTITY`, and `DEVELOPMENT_TEAM`; pass
 `DMG_SIGN_IDENTITY` to sign the disk image itself. Release Developer ID
