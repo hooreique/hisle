@@ -1,5 +1,8 @@
 <p align="center">
-  <img src="hisle/AppIcon.icon/Assets/HisleLogo.svg" width="128" alt="hisle 로고">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="hisle/AppIcon.icon/Assets/HisleLogo-white.svg">
+    <img src="hisle/AppIcon.icon/Assets/HisleLogo.svg" width="128" alt="hisle 로고">
+  </picture>
 </p>
 
 <h1 align="center">hisle</h1>

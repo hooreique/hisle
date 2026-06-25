@@ -10,13 +10,16 @@ bundle.
 
 - Source: `hisle/AppIcon.icon/`
 - Foreground logo: `hisle/AppIcon.icon/Assets/HisleLogo.svg`
+- README dark-mode logo: `hisle/AppIcon.icon/Assets/HisleLogo-white.svg`
 - Fallback PNG asset catalog: `hisle/Assets.xcassets/AppIcon.appiconset/`
 - Xcode setting: `ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon`
 - Build output: `hisle.app/Contents/Resources/AppIcon.icns`
 
 `HisleLogo.svg` must contain only the logo foreground. The app icon's white
 background is handled as fill/background data in the `AppIcon.icon` document.
-Do not make the app icon from `tools/icons/HisleInputSource.svg`.
+`HisleLogo-white.svg` is only for the README dark-mode image fallback. Do not
+make the app icon from `HisleLogo-white.svg` or
+`tools/icons/HisleInputSource.svg`.
 
 ## Input Method Icon
 
