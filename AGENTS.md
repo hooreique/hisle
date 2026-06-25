@@ -33,6 +33,8 @@
 - `hisle/Resources/` contains bundled input method icon resources.
 - `hisle/Info.plist` contains input method metadata consumed by macOS.
 - `tools/` contains local Nushell build/install helpers.
+- `.github/workflows/release.yml` contains the manual GitHub Actions workflow
+  for building, notarizing, stapling, verifying, and uploading the release DMG.
 - `docs/` contains development notes.
 - `docs/input-modes.md` specifies `hisle` input-mode behavior, including
   left/right Shift mode selection and the boundary between `hisle`, Colemak,
@@ -153,7 +155,13 @@
   notarization and stapling remain release-only steps that require Developer ID
   credentials. For Developer ID packaging, pass Xcode signing overrides such as
   `CODE_SIGN_STYLE`, `CODE_SIGN_IDENTITY`, and `DEVELOPMENT_TEAM`; pass
-  `DMG_SIGN_IDENTITY` to sign the disk image itself.
+  `DMG_SIGN_IDENTITY` to sign the disk image itself. Release Developer ID
+  packaging must sign the app and helper with secure timestamps; the package
+  script adds `--timestamp --options runtime` and validates the timestamps
+  before creating the DMG.
+- The release GitHub Actions workflow is manual-dispatch only and uses the
+  `release` Environment for Developer ID and notary credentials. When the runner
+  needs Nix, use `DeterminateSystems/determinate-nix-action@v3.21.2`.
 - Keep local release credentials under ignored `local/`, not in the repository
   root. `tools/notary.nu` reads notary credentials from environment variables
   (`NOTARY_API_KEY_PATH`, `NOTARY_API_KEY_ID`, `NOTARY_API_ISSUER_ID`) or from

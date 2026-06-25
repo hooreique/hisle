@@ -15,6 +15,44 @@ def local-value [name: string] {
     open --raw $path | str trim
 }
 
+def print-notary-log-summary [log_output_path: string] {
+    if not ($log_output_path | path exists) {
+        return
+    }
+
+    let log = open $log_output_path
+    let status_summary = ($log.statusSummary? | default "")
+    let issues = ($log.issues? | default [])
+
+    if not ($status_summary | is-empty) {
+        print $"Notary summary: ($status_summary)"
+    }
+
+    if ($issues | length) == 0 {
+        return
+    }
+
+    print $"Notary issues: ($issues | length)"
+    for issue in $issues {
+        let severity = ($issue.severity? | default "issue")
+        let path = ($issue.path? | default "<unknown path>")
+        let architecture = ($issue.architecture? | default "")
+        let architecture_suffix = if ($architecture | is-empty) {
+            ""
+        } else {
+            $" [($architecture)]"
+        }
+        let message = ($issue.message? | default "<no message>")
+        let doc_url = ($issue.docUrl? | default "")
+
+        print $"  - ($severity): ($path)($architecture_suffix): ($message)"
+
+        if not ($doc_url | is-empty) {
+            print $"    ($doc_url)"
+        }
+    }
+}
+
 if not ($dmg_path | path exists) {
     error make { msg: $"Missing DMG: ($dmg_path)" }
 }
@@ -85,6 +123,7 @@ if $status_info.status != "Accepted" {
         mkdir $notary_dir
         ^/usr/bin/xcrun notarytool log $submission_id --key $notary_key_path --key-id $notary_key_id --issuer $notary_issuer_id $log_output_path
         print $"Saved notary log: ($log_output_path)"
+        print-notary-log-summary $log_output_path
     } catch {
         print "Notary log is not available yet."
     }

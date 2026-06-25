@@ -27,7 +27,23 @@ if ($developer_dir | path exists) {
 let code_sign_style = ($env.CODE_SIGN_STYLE? | default "")
 let code_sign_identity = ($env.CODE_SIGN_IDENTITY? | default "")
 let development_team = ($env.DEVELOPMENT_TEAM? | default "")
-let other_code_sign_flags = ($env.OTHER_CODE_SIGN_FLAGS? | default "")
+let requested_other_code_sign_flags = ($env.OTHER_CODE_SIGN_FLAGS? | default "")
+let release_developer_id_signing = $configuration == "Release" and not ($code_sign_identity | is-empty)
+let other_code_sign_flags = if $release_developer_id_signing {
+    let flags = if ($requested_other_code_sign_flags | str contains "--timestamp") {
+        $requested_other_code_sign_flags
+    } else {
+        $"($requested_other_code_sign_flags) --timestamp" | str trim
+    }
+
+    if ($flags | str contains "--options runtime") {
+        $flags
+    } else {
+        $"($flags) --options runtime" | str trim
+    }
+} else {
+    $requested_other_code_sign_flags
+}
 let xcode_build_settings = [$"SYMROOT=($build_dir)"]
 let xcode_build_settings = if ($code_sign_style | is-empty) {
     $xcode_build_settings
@@ -50,6 +66,20 @@ let xcode_build_settings = if ($other_code_sign_flags | is-empty) {
     $xcode_build_settings | append $"OTHER_CODE_SIGN_FLAGS=($other_code_sign_flags)"
 }
 
+def require-secure-timestamp [path: string] {
+    let result = do {
+        ^/usr/bin/codesign -dvvv $path
+    } | complete
+
+    if $result.exit_code != 0 {
+        error make { msg: $"Failed to read code signature for ($path): ($result.stderr | str trim)" }
+    }
+
+    if not ($result.stderr | lines | any {|line| $line =~ "^Timestamp=" }) {
+        error make { msg: $"Missing secure timestamp in code signature: ($path)" }
+    }
+}
+
 cd $root_dir
 
 ^/usr/bin/xcodebuild -project $project -scheme $scheme -configuration $configuration -destination $destination ...$xcode_build_settings build
@@ -62,6 +92,17 @@ if not ($built_app | path exists) {
 }
 
 ^/usr/bin/codesign --verify --deep --strict $built_app
+
+if $release_developer_id_signing {
+    print "Validating secure timestamps for Developer ID signatures..."
+    require-secure-timestamp $built_app
+    require-secure-timestamp ([$built_app "Contents" "Helpers" $product_name] | path join)
+
+    let core_resource_bundle = [$built_app "Contents" "Resources" "hisle-core_HisleCore.bundle"] | path join
+    if ($core_resource_bundle | path exists) {
+        require-secure-timestamp $core_resource_bundle
+    }
+}
 
 let info_plist = [$built_app "Contents" "Info.plist"] | path join
 let marketing_version = if ($info_plist | path exists) {
