@@ -1,5 +1,10 @@
 # Maintenance Guide
 
+## Local Overrides
+
+- `AGENTS.local.md`, when present, is the higher-priority local override for
+  this guide.
+
 ## Documentation Boundaries
 
 - `AGENTS.md` is for maintainers and coding agents. Keep only rules that apply
@@ -64,6 +69,22 @@
 - Nix shells, Xcode build boundaries, `Makefile`, helper scripts, or version
   ownership: read `docs/toolchains.md`.
 
+## Best Practices
+
+- When implementation details are unclear, consult Real World References. These
+  are reliable open-source projects that have been chosen by many users and are
+  worth studying closely.
+- Ghostty (`../ghostty`) is a useful reference for strong Nix usage that still
+  accounts for Apple tools.
+- Gureum (`../gureum`) is a useful precedent for macOS Korean input methods.
+- libhangul (`../libhangul`) is a useful precedent for Hangul input models.
+- Local clone paths can differ by developer. If the default reference paths do
+  not exist, optionally check `AGENTS.local.md` for local reference paths.
+  `AGENTS.local.md` is ignored by source control and is absent by default.
+- Focused `docs/*` files may name the Real World Reference that applies to
+  their ownership area. Keep local clone-path override mechanics here instead
+  of repeating them in each focused document.
+
 ## Always Apply
 
 - Prefer `make` targets for stable local workflows. Use `make help` to list
@@ -83,10 +104,6 @@
   implementation notes, specs, and tests. In particular, use `대표 글쇠` for
   physical key labels based on standard US Qwerty, and do not translate
   `underlying roman layout`.
-- The reference repository paths in `docs/*` are defaults relative to this
-  repository. Developer environments may use different paths or may not have
-  them. If a default path does not exist, check `AGENTS.local.md` for local
-  reference paths.
 
 ## Verification Routing
 

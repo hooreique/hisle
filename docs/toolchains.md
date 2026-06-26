@@ -85,8 +85,4 @@ ownership changes.
 ## References
 
 - Use `../ghostty` (https://github.com/ghostty-org/ghostty) as the reference
-  for clear project layout and lightweight developer commands.
-- The path above is a default relative to this repository. Developer
-  environments may use a different path or may not have the repository. If it
-  does not exist, check `AGENTS.local.md` for local reference paths.
-
+  for strong Nix usage that still accounts for Apple tools.

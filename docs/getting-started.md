@@ -1,39 +1,28 @@
 # Getting Started
 
-This is a small, intentionally low-profile install and first-run guide for
-people who already decided they want to try `hisle`. Keep project motivation
-and contribution stance in `README.md`; keep build-system detail in
-`docs/toolchains.md`, `docs/macos-imk.md`, and `docs/packaging.md`.
+## Requirements
 
-## Prerequisites
+- Binary install: macOS.
+- Source install: Apple Silicon macOS, Xcode at `/Applications/Xcode.app`, and
+  Nix with flakes enabled.
 
-For binary use:
+## Install From The Release DMG
 
-- macOS.
-- A built `hisle.app` bundle, usually from a DMG.
+Fastest: download the `.dmg` from
+<https://github.com/hooreique/hisle/releases>, open it, and read the
+`install.txt` inside.
 
-For source builds:
+Short version:
 
-- Apple Silicon macOS. The checked-in Nix flake targets `aarch64-darwin`.
-- Xcode installed, normally at `/Applications/Xcode.app`.
-- Nix with flakes enabled.
+1. Copy `hisle.app` to `~/Library/Input Methods/`.
+2. Open System Settings > Keyboard > Input Sources.
+3. Add `hisle`, then select it from the input menu.
 
-For scripted GUI verification, see `docs/testing.md`; it has extra requirements
-such as Sublime Text and Accessibility permission.
-
-## Install From A DMG
-
-1. Open the DMG.
-2. Copy `hisle.app` to `~/Library/Input Methods/`.
-3. Open System Settings > Keyboard > Input Sources.
-4. Add `hisle`, then select it from the input menu.
-
-If `hisle` does not appear in Input Sources after copying the app, log out and
-back in, then check again.
+If `hisle` does not appear in Input Sources, log out and back in.
 
 ## Build And Install From Source
 
-Use the Make target instead of launching the input method directly from Xcode:
+Use the Make target instead of launching the input method from Xcode:
 
 ```sh
 nix develop .#xcode-work --command -- make install-debug
@@ -41,16 +30,10 @@ nix develop .#xcode-work --command -- make install-debug
 
 Then add and select `hisle` in System Settings > Keyboard > Input Sources.
 
-To confirm the bundled helper was installed:
-
-```sh
-"$HOME/Library/Input Methods/hisle.app/Contents/Helpers/hisle" --version
-```
-
 ## First Run
 
-`hisle` starts in Roman mode. Tap left Shift by itself to select Roman mode, and
-tap right Shift by itself to select Hangul mode.
+`hisle` starts in Roman mode. Tap left Shift by itself for Roman mode, and tap
+right Shift by itself for Hangul mode.
 
 Hangul mode uses a personal Cole Sebeol-based layout with `sane-punctuation`;
 it is not meant to be a general Korean input method. Shortcut behavior and
@@ -58,13 +41,9 @@ mode-switching policy are described in `docs/input-modes.md`.
 
 ## Update Or Remove
 
-To replace a source install, rerun:
+To update a source install, rerun the install command above.
 
-```sh
-nix develop .#xcode-work --command -- make install-debug
-```
-
-To remove the local install:
+To remove from a source checkout:
 
 ```sh
 make uninstall
@@ -75,6 +54,3 @@ Manual removal is just removing the installed bundle:
 ```sh
 rm -rf "$HOME/Library/Input Methods/hisle.app"
 ```
-
-Local DMG creation, signing, notarization, and release packaging are covered in
-`docs/packaging.md`.

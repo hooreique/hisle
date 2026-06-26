@@ -106,6 +106,3 @@ sparse lifecycle or unexpected fallback events.
 
 - Use `../gureum` (https://github.com/gureum/gureum) as the reference for app
   implementation and InputMethodKit behavior.
-- The path above is a default relative to this repository. Developer
-  environments may use a different path or may not have the repository. If it
-  does not exist, check `AGENTS.local.md` for local reference paths.

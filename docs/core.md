@@ -49,7 +49,3 @@ the Nix-provided `xcbuild` shim.
 
 - Use `../libhangul` (https://github.com/libhangul/libhangul) as the reference
   for Unicode Hangul values, Sebeolsik layout data, and behavior comparison.
-- The path above is a default relative to this repository. Developer
-  environments may use a different path or may not have the repository. If it
-  does not exist, check `AGENTS.local.md` for local reference paths.
-
