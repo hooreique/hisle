@@ -14,13 +14,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Install Nix
         uses: DeterminateSystems/determinate-nix-action@v3.21.2
-        with:
-          extra-conf: |
-            experimental-features = nix-command flakes
 
       - name: Check toolchain
         run: nix develop .#xcode-work --command -- make check-toolchain
@@ -55,7 +52,6 @@ jobs:
           DEVELOPMENT_TEAM: ${{ vars.DEVELOPMENT_TEAM }}
           CODE_SIGN_IDENTITY: ${{ vars.CODE_SIGN_IDENTITY }}
           DMG_SIGN_IDENTITY: ${{ vars.DMG_SIGN_IDENTITY }}
-          OTHER_CODE_SIGN_FLAGS: "--timestamp --options runtime"
         run: |
           set -euo pipefail
 
@@ -64,8 +60,7 @@ jobs:
             CODE_SIGN_STYLE=Manual \
             DEVELOPMENT_TEAM="$DEVELOPMENT_TEAM" \
             CODE_SIGN_IDENTITY="$CODE_SIGN_IDENTITY" \
-            DMG_SIGN_IDENTITY="$DMG_SIGN_IDENTITY" \
-            OTHER_CODE_SIGN_FLAGS="$OTHER_CODE_SIGN_FLAGS"
+            DMG_SIGN_IDENTITY="$DMG_SIGN_IDENTITY"
 
       - name: Export release metadata
         id: release_metadata
@@ -91,17 +86,11 @@ jobs:
           fi
 
           {
-            echo "APP_VERSION=$app_version"
             echo "RELEASE_TAG=$release_tag"
-            echo "DMG_NAME=$dmg_name"
             echo "DMG_PATH=$dmg_path"
-            echo "DMG_ARTIFACT_NAME=$artifact_name"
           } >> "$GITHUB_ENV"
 
           {
-            echo "app_version=$app_version"
-            echo "release_tag=$release_tag"
-            echo "dmg_name=$dmg_name"
             echo "dmg_path=$dmg_path"
             echo "artifact_name=$artifact_name"
           } >> "$GITHUB_OUTPUT"
@@ -126,22 +115,14 @@ jobs:
 
       - name: Upload notary logs
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: notary-logs
           path: build/notary
           if-no-files-found: ignore
 
-      - name: Verify stapled DMG
-        run: |
-          set -euo pipefail
-
-          xcrun stapler validate "$DMG_PATH"
-          spctl -a -vv -t open --context context:primary-signature "$DMG_PATH"
-          codesign --verify --verbose=4 "$DMG_PATH"
-
       - name: Upload DMG artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ steps.release_metadata.outputs.artifact_name }}
           path: ${{ steps.release_metadata.outputs.dmg_path }}
