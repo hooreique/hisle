@@ -14,6 +14,7 @@
       pkgs.nushell
       pkgs.swift
       pkgs.swiftpm
+      pkgs.undmg
     ];
   in {
     devShells.${system} = {

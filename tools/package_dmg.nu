@@ -154,7 +154,7 @@ $install_note | save --force ([$staging_dir "Install.txt"] | path join)
 
 rm --force $dmg_path
 
-^/usr/bin/hdiutil create -volname $volume_name -srcfolder $staging_dir -ov -format UDZO $dmg_path
+^/usr/bin/hdiutil create -volname $volume_name -srcfolder $staging_dir -ov -format UDZO -fs "HFS+" $dmg_path
 
 let dmg_sign_identity = ($env.DMG_SIGN_IDENTITY? | default "")
 if not ($dmg_sign_identity | is-empty) {

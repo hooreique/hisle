@@ -121,6 +121,21 @@ jobs:
           path: build/notary
           if-no-files-found: ignore
 
+      - name: Validate DMG extraction with undmg
+        run: |
+          set -euo pipefail
+
+          extract_dir="$(mktemp -d)"
+          trap 'rm -rf "$extract_dir"' EXIT
+          dmg_abs="$PWD/$DMG_PATH"
+
+          nix develop --command -- sh -c 'cd "$1" && undmg "$2"' sh "$extract_dir" "$dmg_abs"
+
+          if [[ ! -f "$extract_dir/hisle.app/Contents/Info.plist" ]]; then
+            echo "::error::undmg did not extract hisle.app/Contents/Info.plist from $DMG_PATH"
+            exit 1
+          fi
+
       - name: Upload DMG artifact
         uses: actions/upload-artifact@v7
         with:

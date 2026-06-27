@@ -31,6 +31,11 @@ packaging. The DMG is the intended first binary distribution container, while
 notarization and stapling remain release-only steps that require Developer ID
 credentials.
 
+Release DMGs are intentionally compressed UDZO images with an HFS+ internal
+filesystem so `pkgs.undmg` can extract them in Nix-based validation. Do not
+switch the release image back to an implicit filesystem without revalidating
+`undmg` compatibility.
+
 The release workflow runs on `macos-26` so GitHub Actions uses Xcode 26 for
 asset catalog compilation. Keep release packaging on Xcode 26 or newer unless
 the app icon output is revalidated; the app icon source is an `AppIcon.icon`
