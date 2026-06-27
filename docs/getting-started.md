@@ -43,6 +43,41 @@ mode-switching policy are described in `docs/input-modes.md`.
 
 To update a source install, rerun the install command above.
 
+To try a reinstalled build immediately, check the current input method process
+after reinstalling:
+
+```sh
+pgrep -fl 'hisle\.app'
+```
+
+Then stop it:
+
+```sh
+pkill -f 'hisle\.app'
+```
+
+Check it again:
+
+```sh
+pgrep -fl 'hisle\.app'
+```
+
+If the `hisle` input source is active, macOS may start a new `hisle` process
+right away. In that case, seeing a different PID means the newly installed
+bundle is running.
+
+> [!TIP]
+> If the steps above do not seem to work, log out of macOS and log back in.
+
+To inspect `hisle` activity at any time, stream its unified log:
+
+```sh
+/usr/bin/log stream --style compact --level info --predicate 'subsystem == "hooreique.inputmethod.hisle"'
+```
+
+When you switch to the `hisle` input source, the stream prints a
+`controller runtime` notice with the build profile and app version.
+
 To remove from a source checkout:
 
 ```sh
