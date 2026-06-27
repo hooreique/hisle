@@ -79,8 +79,14 @@ Keep app and core versions independent. The app distribution version lives in
 `hisle/Config/HisleVersion.xcconfig` as `MARKETING_VERSION` and
 `CURRENT_PROJECT_VERSION`; the `hisle-core` library version lives in
 `hisle-core/Sources/HisleCore/HisleCoreVersion.swift` as `HisleCore.version`.
-Do not require these versions to match. Use `make version-check` after version
-ownership changes.
+Do not require these versions to match.
+
+During bug-fix investigation, use `CURRENT_PROJECT_VERSION` as the runtime
+identity marker for installed debug app binaries. Do not bump
+`MARKETING_VERSION` for each investigation build. See `docs/bugfixes.md` for
+the bug-fix workflow.
+
+Use `make version-check` after version ownership changes.
 
 ## References
 

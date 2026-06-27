@@ -43,6 +43,7 @@
 - `tools/` contains local Nushell build, install, package, test, and icon
   helpers.
 - `.github/workflows/release.yaml` contains the manual release workflow.
+- `bugfix/` contains per-bug investigation notes and status records.
 - `docs/` contains focused maintainer notes. Keep each topic in its owning
   document.
 - `docs/getting-started.md` is the low-profile user-facing exception for
@@ -50,6 +51,8 @@
 
 ## Read Before Changing
 
+- Bug fixes or bug-specific investigation records: read `docs/bugfixes.md`,
+  then read the owning area document for the expected code change.
 - Core Hangul behavior, Cole Sebeol, Unicode Hangul values, key layout data, or
   `hisle-core/`: read `docs/core.md` and `docs/terminology.md`.
 - Input modes, left/right Shift behavior, Escape behavior, shortcut forwarding,
