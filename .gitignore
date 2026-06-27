@@ -32,5 +32,6 @@ result-*
 
 # Local environment overrides
 local
+.env.local
 .envrc.local
 AGENTS.local.md
