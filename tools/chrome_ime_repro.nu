@@ -9,6 +9,7 @@ const expected_artifacts = [
     "dom-events.jsonl",
     "editor-chaos.jsonl",
     "ime.log",
+    "runtime-identity.log",
     "final-state.json",
     "screenshot.png",
     "trace.zip",
@@ -66,19 +67,58 @@ cd $root_dir
 
 let seed = ($env.SEED? | default "1")
 let iterations = ($env.ITERATIONS? | default "1")
-let target_kind = ($env.HISLE_CHROME_TARGET? | default "textarea")
 let scenario = ($env.HISLE_CHROME_SCENARIO? | default "standard")
-let initial_text = ($env.HISLE_CHROME_INITIAL_TEXT? | default "")
-let initial_caret = ($env.HISLE_CHROME_INITIAL_CARET? | default "")
+let stale_selection_annyeonghaseyo = $scenario == "stale-selection-annyeonghaseyo"
+let target_kind_env = ($env.HISLE_CHROME_TARGET? | default "")
+let target_kind = if ($target_kind_env | is-empty) {
+    if $stale_selection_annyeonghaseyo { "contenteditable" } else { "textarea" }
+} else {
+    $target_kind_env
+}
+let initial_text_env = ($env.HISLE_CHROME_INITIAL_TEXT? | default "")
+let initial_text = if ($initial_text_env | is-empty) {
+    if $stale_selection_annyeonghaseyo { "가나다라마바사" } else { "" }
+} else {
+    $initial_text_env
+}
+let initial_caret_env = ($env.HISLE_CHROME_INITIAL_CARET? | default "")
+let initial_caret = if ($initial_caret_env | is-empty) {
+    if $stale_selection_annyeonghaseyo { "3" } else { "" }
+} else {
+    $initial_caret_env
+}
+let initial_selection_env = ($env.HISLE_CHROME_INITIAL_SELECTION? | default "")
+let initial_selection = if ($initial_selection_env | is-empty) {
+    if $stale_selection_annyeonghaseyo { "0:7" } else { "" }
+} else {
+    $initial_selection_env
+}
+let initial_double_click_env = ($env.HISLE_CHROME_INITIAL_DOUBLE_CLICK? | default "")
+let initial_double_click = if ($initial_double_click_env | is-empty) {
+    if $stale_selection_annyeonghaseyo { "1" } else { "" }
+} else {
+    $initial_double_click_env
+}
 let initial_render = ($env.HISLE_CHROME_INITIAL_RENDER? | default "")
 let move_after_composition_caret = ($env.HISLE_CHROME_MOVE_AFTER_COMPOSITION_CARET? | default "")
 let move_after_input_caret = ($env.HISLE_CHROME_MOVE_AFTER_INPUT_CARET? | default "")
 let click_after_input_caret = ($env.HISLE_CHROME_CLICK_AFTER_INPUT_CARET? | default "")
+let drag_selection = ($env.HISLE_CHROME_DRAG_SELECTION? | default "")
 let force_render_on_composition_end = ($env.HISLE_CHROME_FORCE_RENDER_ON_COMPOSITION_END? | default "")
-let editor_chaos = ($env.HISLE_CHROME_EDITOR_CHAOS? | default "")
+let editor_chaos_env = ($env.HISLE_CHROME_EDITOR_CHAOS? | default "")
+let editor_chaos = if ($editor_chaos_env | is-empty) {
+    if $stale_selection_annyeonghaseyo { "restore-initial-selection" } else { "" }
+} else {
+    $editor_chaos_env
+}
 let chaos_delay = ($env.HISLE_CHROME_CHAOS_DELAY_MS? | default "")
 let allow_mismatch = ($env.HISLE_CHROME_ALLOW_MISMATCH? | default "")
-let expected_value = ($env.EXPECTED_VALUE? | default "")
+let expected_value_env = ($env.EXPECTED_VALUE? | default "")
+let expected_value = if ($expected_value_env | is-empty) {
+    if $stale_selection_annyeonghaseyo { "안녕하세요" } else { "" }
+} else {
+    $expected_value_env
+}
 let skip_focus_click = ($env.HISLE_CHROME_SKIP_FOCUS_CLICK? | default "")
 let click_initial_caret = ($env.HISLE_CHROME_CLICK_INITIAL_CARET? | default "")
 let run_id_env = ($env.RUN_ID? | default "")
@@ -149,10 +189,13 @@ let observer_job = job spawn --description "hisle chrome ime observer" {
             HISLE_CHROME_TARGET: $target_kind
             HISLE_CHROME_INITIAL_TEXT: $initial_text
             HISLE_CHROME_INITIAL_CARET: $initial_caret
+            HISLE_CHROME_INITIAL_SELECTION: $initial_selection
+            HISLE_CHROME_INITIAL_DOUBLE_CLICK: $initial_double_click
             HISLE_CHROME_INITIAL_RENDER: $initial_render
             HISLE_CHROME_MOVE_AFTER_COMPOSITION_CARET: $move_after_composition_caret
             HISLE_CHROME_MOVE_AFTER_INPUT_CARET: $move_after_input_caret
             HISLE_CHROME_CLICK_AFTER_INPUT_CARET: $click_after_input_caret
+            HISLE_CHROME_DRAG_SELECTION: $drag_selection
             HISLE_CHROME_FORCE_RENDER_ON_COMPOSITION_END: $force_render_on_composition_end
             HISLE_CHROME_EDITOR_CHAOS: $editor_chaos
             HISLE_CHROME_CHAOS_DELAY_MS: $chaos_delay
@@ -244,9 +287,12 @@ let driver_state = if ($driver_state_file | path exists) {
     scenario: $scenario
     initial_text: $initial_text
     initial_caret: (maybe-null $initial_caret)
+    initial_selection: (maybe-null $initial_selection)
+    initial_double_click: ($initial_double_click == "1")
     initial_render: (maybe-null $initial_render)
     move_after_composition_caret: (maybe-null $move_after_composition_caret)
     move_after_input_caret: (maybe-null $move_after_input_caret)
+    drag_selection: (maybe-null $drag_selection)
     force_render_on_composition_end: ($force_render_on_composition_end == "1")
     editor_chaos: $editor_chaos
     chaos_delay_milliseconds: (maybe-null $chaos_delay)

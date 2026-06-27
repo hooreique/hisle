@@ -124,15 +124,31 @@ Useful environment options:
   default `textarea`.
 - `HISLE_CHROME_SCENARIO`, one of `standard`, `click-during-composition`,
   `idle-stress`, `midline-insert`, `two-insert-move`,
-  `active-move-continue`, or `click-move-continue`; default `standard`.
+  `active-move-continue`, `click-move-continue`, `drag-selection-input`,
+  `selected-range-input`, `selected-range-numbers`,
+  `selected-range-annyeonghaseyo`, `stale-selection-annyeonghaseyo`, or
+  `double-click-selection-annyeonghaseyo`; `selected-range-annyeonghaseyo` is a
+  focused selected-text regression repro, `stale-selection-annyeonghaseyo`
+  combines default contenteditable text, double-click selection, stale
+  selection restoration, and expected final value `안녕하세요`, and
+  `double-click-selection-annyeonghaseyo` double-clicks the
+  `HISLE_CHROME_INITIAL_CARET` point before typing; default `standard`.
 - `HISLE_CHROME_EDITOR_CHAOS`, optional WYSIWYG editor maintenance simulation:
   `idle-normalize`, `focus-pulse`, `active-rerender`, or
-  `active-rerender-focus-pulse`.
+  `active-rerender-focus-pulse`; `restore-initial-selection` restores the
+  initial `start:end` selection after each composition end to model stale host
+  selection state.
 - `HISLE_CHROME_IDLE_MS`, `HISLE_CHROME_CHAOS_DELAY_MS`, and
   `HISLE_CHROME_DELAY_MIN_MS`/`HISLE_CHROME_DELAY_MAX_MS` tune the HID and idle
   timings.
 - `HISLE_CHROME_INITIAL_TEXT` and `HISLE_CHROME_INITIAL_CARET` seed the target
   text and caret offset.
+- `HISLE_CHROME_INITIAL_SELECTION` seeds the target selection in `start:end`
+  form. It is useful with `selected-range-input`, which preserves that selection
+  and sends real HID key input through the input method.
+- `HISLE_CHROME_INITIAL_DOUBLE_CLICK=1` asks the observer to double-click the
+  `HISLE_CHROME_INITIAL_CARET` point using Chrome mouse events before the Swift
+  HID driver starts typing.
 - `HISLE_CHROME_INITIAL_RENDER`, one of `text`, `spans`, or `paragraphs`;
   `paragraphs` maps newline-separated WYSIWYG text to `<p data-line>` blocks.
 - `HISLE_CHROME_MOVE_AFTER_COMPOSITION_CARET` and
@@ -143,6 +159,10 @@ Useful environment options:
   caret target for the `click-move-continue` scenario. If Chrome screen-point
   estimation is off in the local environment, tune the HID click with
   `HISLE_CHROME_CLICK_SCREEN_DX` and `HISLE_CHROME_CLICK_SCREEN_DY`.
+- `HISLE_CHROME_DRAG_SELECTION` gives `drag-selection-input` a textarea offset
+  range in `start:end` form. The HID driver drags that range, switches to
+  Hangul mode, types the first representative `j` key, and captures the active
+  composition state.
 - `HISLE_CHROME_SKIP_FOCUS_CLICK=1` skips the initial window-center focus
   click after Chrome is already frontmost.
 - `HISLE_CHROME_CLICK_INITIAL_CARET=1` asks the driver to click the observer's
@@ -153,6 +173,39 @@ Useful environment options:
 - `HISLE_CHROME_ALLOW_MISMATCH=1` keeps the run successful while preserving the
   observed mismatch in artifacts; use this for destructive repro scenarios.
 
+### Selected Range Regression Scenarios
+
+Use these scenarios to check selected-range replacement behavior through the
+Chrome IME diagnostics.
+
+First run the control. It selects `가나다라마바사` in contenteditable and types
+`안녕하세요`; the final value should be the full replacement:
+
+```sh
+env \
+  HISLE_CHROME_TARGET=contenteditable \
+  HISLE_CHROME_SCENARIO=selected-range-annyeonghaseyo \
+  HISLE_CHROME_INITIAL_TEXT='가나다라마바사' \
+  HISLE_CHROME_INITIAL_SELECTION='0:7' \
+  EXPECTED_VALUE='안녕하세요' \
+  nix develop .#browser-work --command -- nu tools/chrome_ime_repro.nu
+```
+
+Then run the stale-selection model. It uses the same contenteditable surface,
+double-click selection, and `restore-initial-selection` editor chaos. The
+expected final value is `안녕하세요`; a selected-range regression usually returns
+only the last unit, `요`:
+
+```sh
+env \
+  HISLE_CHROME_SCENARIO=stale-selection-annyeonghaseyo \
+  RUN_ID=stale-selection-annyeonghaseyo \
+  nix develop .#browser-work --command -- nu tools/chrome_ime_repro.nu
+```
+
+This scenario is a focused fixture for stale host/client range behavior; inspect
+the artifacts to confirm which layer reported or restored the selected range.
+
 Artifacts are written under `build/chrome-ime/<run-id>/`:
 
 - `keys.jsonl`: Swift HID key-down/key-up events with sequence numbers,
@@ -161,6 +214,8 @@ Artifacts are written under `build/chrome-ime/<run-id>/`:
   selection, focus, and blur events.
 - `editor-chaos.jsonl`: editor maintenance events for WYSIWYG chaos scenarios.
 - `ime.log`: unified log stream for `hooreique.inputmethod.hisle`.
+- `runtime-identity.log`: post-run unified log snapshot of the running input
+  method app version, bundle path, process id, and replacement policy.
 - `final-state.json`: final value, HTML for non-textarea targets, selection,
   expected value, match result, and anomaly counters.
 - `screenshot.png`: final browser screenshot.

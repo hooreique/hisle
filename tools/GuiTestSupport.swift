@@ -15,16 +15,25 @@ enum GuiTestFailure: Error, CustomStringConvertible {
 }
 
 enum KeyCode {
+    static let a: CGKeyCode = 0
     static let b: CGKeyCode = 11
     static let c: CGKeyCode = 8
     static let d: CGKeyCode = 2
     static let e: CGKeyCode = 14
     static let f: CGKeyCode = 3
     static let g: CGKeyCode = 5
+    static let h: CGKeyCode = 4
     static let j: CGKeyCode = 38
     static let k: CGKeyCode = 40
+    static let m: CGKeyCode = 46
+    static let n: CGKeyCode = 45
     static let r: CGKeyCode = 15
+    static let s: CGKeyCode = 1
     static let t: CGKeyCode = 17
+    static let one: CGKeyCode = 18
+    static let two: CGKeyCode = 19
+    static let three: CGKeyCode = 20
+    static let four: CGKeyCode = 21
     static let nine: CGKeyCode = 25
     static let slash: CGKeyCode = 44
     static let space: CGKeyCode = 49
@@ -463,6 +472,84 @@ func clickScreenPoint(_ point: CGPoint, description: String) throws {
     Thread.sleep(forTimeInterval: 0.08)
     mouseUp.post(tap: .cghidEventTap)
     Thread.sleep(forTimeInterval: 0.2)
+}
+
+func doubleClickScreenPoint(_ point: CGPoint, description: String) throws {
+    guard let source = CGEventSource(stateID: .hidSystemState) else {
+        throw GuiTestFailure.message("Could not create a CGEventSource for \(description).")
+    }
+
+    for clickCount in 1...2 {
+        guard let mouseDown = CGEvent(
+            mouseEventSource: source,
+            mouseType: .leftMouseDown,
+            mouseCursorPosition: point,
+            mouseButton: .left
+        ),
+        let mouseUp = CGEvent(
+            mouseEventSource: source,
+            mouseType: .leftMouseUp,
+            mouseCursorPosition: point,
+            mouseButton: .left
+        ) else {
+            throw GuiTestFailure.message("Could not create mouse events for \(description).")
+        }
+
+        mouseDown.setIntegerValueField(.mouseEventClickState, value: Int64(clickCount))
+        mouseUp.setIntegerValueField(.mouseEventClickState, value: Int64(clickCount))
+        mouseDown.post(tap: .cghidEventTap)
+        Thread.sleep(forTimeInterval: 0.06)
+        mouseUp.post(tap: .cghidEventTap)
+        Thread.sleep(forTimeInterval: clickCount == 1 ? 0.08 : 0.25)
+    }
+}
+
+func dragScreenPoint(from startPoint: CGPoint, to endPoint: CGPoint, description: String) throws {
+    guard let source = CGEventSource(stateID: .hidSystemState) else {
+        throw GuiTestFailure.message("Could not create a CGEventSource for \(description).")
+    }
+
+    guard let mouseDown = CGEvent(
+        mouseEventSource: source,
+        mouseType: .leftMouseDown,
+        mouseCursorPosition: startPoint,
+        mouseButton: .left
+    ) else {
+        throw GuiTestFailure.message("Could not create mouse-down event for \(description).")
+    }
+
+    mouseDown.post(tap: .cghidEventTap)
+    Thread.sleep(forTimeInterval: 0.12)
+
+    for step in 1...8 {
+        let progress = CGFloat(step) / 8.0
+        let point = CGPoint(
+            x: startPoint.x + (endPoint.x - startPoint.x) * progress,
+            y: startPoint.y + (endPoint.y - startPoint.y) * progress
+        )
+        guard let drag = CGEvent(
+            mouseEventSource: source,
+            mouseType: .leftMouseDragged,
+            mouseCursorPosition: point,
+            mouseButton: .left
+        ) else {
+            throw GuiTestFailure.message("Could not create drag event for \(description).")
+        }
+        drag.post(tap: .cghidEventTap)
+        Thread.sleep(forTimeInterval: 0.04)
+    }
+
+    guard let mouseUp = CGEvent(
+        mouseEventSource: source,
+        mouseType: .leftMouseUp,
+        mouseCursorPosition: endPoint,
+        mouseButton: .left
+    ) else {
+        throw GuiTestFailure.message("Could not create mouse-up event for \(description).")
+    }
+
+    mouseUp.post(tap: .cghidEventTap)
+    Thread.sleep(forTimeInterval: 0.25)
 }
 
 func wait(timeout: TimeInterval, interval: TimeInterval, until condition: () -> Bool) -> Bool {

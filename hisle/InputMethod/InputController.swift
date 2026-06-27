@@ -11,10 +11,14 @@ final class InputController: IMKInputController {
             HisleInputModeState.write(sharedInputMode)
         }
     }
+#if DEBUG
+    private static let replacementRangePolicyID = "current-selection-nsnotfound+marked-continuation"
+#endif
 
     private var hangulEngine = InputController.makeEngine()
     private var hasMarkedText = false
     private var currentMarkedText = ""
+    private var pendingMarkedTextReplacementRange: NSRange?
     private var shiftTap = ShiftTapDetector()
 
     private var inputMode: HisleInputMode {
@@ -22,17 +26,25 @@ final class InputController: IMKInputController {
         set { Self.sharedInputMode = newValue }
     }
 
+    private var currentSelectionReplacementRange: NSRange {
+        NSRange(location: NSNotFound, length: 0)
+    }
+
     override init!(server: IMKServer!, delegate: Any!, client inputClient: Any!) {
         super.init(server: server, delegate: delegate, client: inputClient)
         HisleInputModeState.write(inputMode)
         logger.notice("controller initialized")
 #if DEBUG
+        logRuntimeIdentity(stage: "init")
         logger.debug("controller client=\(String(describing: inputClient), privacy: .public)")
 #endif
     }
 
     override func activateServer(_ sender: Any!) {
         KeyboardLayoutOverride.installColemak(for: sender ?? client(), logSuccess: true)
+#if DEBUG
+        logRuntimeIdentity(stage: "activate")
+#endif
         super.activateServer(sender)
     }
 
@@ -120,7 +132,21 @@ final class InputController: IMKInputController {
     }
 
     @objc override func updateComposition() {
+        defer {
+            pendingMarkedTextReplacementRange = nil
+        }
         super.updateComposition()
+    }
+
+    @objc override func replacementRange() -> NSRange {
+        let replacementRange = pendingMarkedTextReplacementRange ?? currentSelectionReplacementRange
+#if DEBUG
+        traceUpdateCompositionReplacementRange(
+            replacementRange,
+            reason: pendingMarkedTextReplacementRange == nil ? "current-selection" : "marked-continuation"
+        )
+#endif
+        return replacementRange
     }
 
     @objc override func composedString(_ sender: Any!) -> Any! {
@@ -138,6 +164,22 @@ final class InputController: IMKInputController {
             fatalError("Failed to initialize ColeSebeolEngine: \(error)")
         }
     }
+
+#if DEBUG
+    private static func bundleInfoValue(for key: String) -> String {
+        guard let value = Bundle.main.object(forInfoDictionaryKey: key) as? String,
+              !value.isEmpty else {
+            return "unknown"
+        }
+        return value
+    }
+
+    private func logRuntimeIdentity(stage: String) {
+        logger.notice(
+            "controller runtime stage=\(stage, privacy: .public) appVersion=\(Self.bundleInfoValue(for: "CFBundleShortVersionString"), privacy: .public) build=\(Self.bundleInfoValue(for: "CFBundleVersion"), privacy: .public) pid=\(ProcessInfo.processInfo.processIdentifier, privacy: .public) bundle=\(Bundle.main.bundleURL.path, privacy: .public) replacementPolicy=\(Self.replacementRangePolicyID, privacy: .public)"
+        )
+    }
+#endif
 
     private func handleKeyInput(
         text: String?,
@@ -353,6 +395,13 @@ final class InputController: IMKInputController {
 #if DEBUG
             traceClientRanges("after-commit committedLength=\(output.committedText.utf16.count)", client: client)
 #endif
+            if !output.markedText.isEmpty {
+                pendingMarkedTextReplacementRange = markedTextContinuationRange(
+                    afterReplacing: replacementRange,
+                    withCommittedText: output.committedText,
+                    client: client
+                )
+            }
         }
 
         if !output.markedText.isEmpty {
@@ -385,6 +434,27 @@ final class InputController: IMKInputController {
             return client
         }
         return client()
+    }
+
+    private func markedTextContinuationRange(
+        afterReplacing replacementRange: NSRange,
+        withCommittedText committedText: String,
+        client: IMKTextInput
+    ) -> NSRange? {
+        let committedLength = committedText.utf16.count
+
+        if replacementRange.location != NSNotFound {
+            let (location, overflow) = replacementRange.location.addingReportingOverflow(committedLength)
+            if !overflow {
+                return NSRange(location: location, length: 0)
+            }
+        }
+
+        let selectedRange = client.selectedRange()
+        guard selectedRange.location != NSNotFound, selectedRange.length == 0 else {
+            return nil
+        }
+        return selectedRange
     }
 
 #if DEBUG
@@ -471,6 +541,23 @@ final class InputController: IMKInputController {
             "client-range replacement=\(NSStringFromRange(replacementRange), privacy: .public) reason=\(reason, privacy: .public) selected=\(NSStringFromRange(selectedRange), privacy: .public) marked=\(NSStringFromRange(markedRange), privacy: .public) hasMarkedText=\(self.hasMarkedText, privacy: .public) currentMarkedLength=\(self.currentMarkedText.utf16.count, privacy: .public)"
         )
     }
+
+    private func traceUpdateCompositionReplacementRange(_ replacementRange: NSRange, reason: String) {
+        guard isClientRangeTracingEnabled else {
+            return
+        }
+
+        guard let client = textClient(from: nil) else {
+            logger.debug(
+                "client-range update-composition replacement=\(NSStringFromRange(replacementRange), privacy: .public) reason=\(reason, privacy: .public) missing-client"
+            )
+            return
+        }
+
+        logger.debug(
+            "client-range update-composition replacement=\(NSStringFromRange(replacementRange), privacy: .public) reason=\(reason, privacy: .public) selected=\(NSStringFromRange(client.selectedRange()), privacy: .public) marked=\(NSStringFromRange(client.markedRange()), privacy: .public) hasMarkedText=\(self.hasMarkedText, privacy: .public) currentMarkedLength=\(self.currentMarkedText.utf16.count, privacy: .public)"
+        )
+    }
 #endif
 
     private func isSelectionRange(_ selectedRange: NSRange, consistentWithMarkedRange markedRange: NSRange) -> Bool {
@@ -502,44 +589,30 @@ final class InputController: IMKInputController {
     }
 
     private func replacementRange(for client: IMKTextInput) -> NSRange {
-        let selectedRange = client.selectedRange()
         let markedRange = client.markedRange()
 
         if hasMarkedText, markedRange.location != NSNotFound, markedRange.length > 0 {
-            if selectedRange.location == NSNotFound ||
-                isSelectionRange(selectedRange, consistentWithMarkedRange: markedRange) {
 #if DEBUG
-                traceReplacementRange(markedRange, selectedRange: selectedRange, markedRange: markedRange, reason: "marked")
+            traceReplacementRange(
+                markedRange,
+                selectedRange: client.selectedRange(),
+                markedRange: markedRange,
+                reason: "marked"
+            )
 #endif
-                return markedRange
-            }
-
-            if selectedRange.length > 0 {
-#if DEBUG
-                traceReplacementRange(selectedRange, selectedRange: selectedRange, markedRange: markedRange, reason: "selected")
-#endif
-                return selectedRange
-            }
-
-            let notFound = NSRange(location: NSNotFound, length: 0)
-#if DEBUG
-            traceReplacementRange(notFound, selectedRange: selectedRange, markedRange: markedRange, reason: "inconsistent")
-#endif
-            return notFound
+            return markedRange
         }
 
-        if selectedRange.location != NSNotFound, selectedRange.length > 0 {
+        let replacementRange = currentSelectionReplacementRange
 #if DEBUG
-            traceReplacementRange(selectedRange, selectedRange: selectedRange, markedRange: markedRange, reason: "selected")
+        traceReplacementRange(
+            replacementRange,
+            selectedRange: client.selectedRange(),
+            markedRange: markedRange,
+            reason: "current-selection"
+        )
 #endif
-            return selectedRange
-        }
-
-        let notFound = NSRange(location: NSNotFound, length: 0)
-#if DEBUG
-        traceReplacementRange(notFound, selectedRange: selectedRange, markedRange: markedRange, reason: "none")
-#endif
-        return notFound
+        return replacementRange
     }
 }
 

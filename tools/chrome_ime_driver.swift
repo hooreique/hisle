@@ -25,6 +25,39 @@ private let expectedValueOverride = ProcessInfo.processInfo.environment["EXPECTE
     $0.isEmpty ? nil : $0
 }
 
+private func logShowStartArgument(for date: Date) -> String {
+    let formatter = DateFormatter()
+    formatter.locale = Locale(identifier: "en_US_POSIX")
+    formatter.timeZone = .current
+    formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+    return formatter.string(from: date)
+}
+
+private func writeRuntimeIdentityLog(to outputURL: URL, since startDate: Date) {
+    let process = Process()
+    let pipe = Pipe()
+
+    process.executableURL = URL(fileURLWithPath: "/usr/bin/log")
+    process.arguments = [
+        "show",
+        "--style", "compact",
+        "--start", logShowStartArgument(for: startDate),
+        "--predicate", "subsystem == \"hooreique.inputmethod.hisle\" && eventMessage CONTAINS \"controller runtime\"",
+    ]
+    process.standardOutput = pipe
+    process.standardError = pipe
+
+    do {
+        try process.run()
+        process.waitUntilExit()
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        try data.write(to: outputURL)
+    } catch {
+        let message = "Failed to capture runtime identity log: \(error)\n"
+        try? message.write(to: outputURL, atomically: true, encoding: .utf8)
+    }
+}
+
 private func environmentInteger(_ name: String, defaultValue: Int, minimum: Int) -> Int {
     guard let text = ProcessInfo.processInfo.environment[name],
           !text.isEmpty,
@@ -97,6 +130,10 @@ private struct ObserverReadyMetadata {
     let initialCaretClientPoint: CGPoint?
     let clickAfterInputScreenPoint: CGPoint?
     let clickAfterInputClientPoint: CGPoint?
+    let dragSelectionStartScreenPoint: CGPoint?
+    let dragSelectionStartClientPoint: CGPoint?
+    let dragSelectionEndScreenPoint: CGPoint?
+    let dragSelectionEndClientPoint: CGPoint?
 
     static func load(from url: URL) -> ObserverReadyMetadata {
         guard let data = try? Data(contentsOf: url),
@@ -107,7 +144,11 @@ private struct ObserverReadyMetadata {
                 initialCaretScreenPoint: nil,
                 initialCaretClientPoint: nil,
                 clickAfterInputScreenPoint: nil,
-                clickAfterInputClientPoint: nil
+                clickAfterInputClientPoint: nil,
+                dragSelectionStartScreenPoint: nil,
+                dragSelectionStartClientPoint: nil,
+                dragSelectionEndScreenPoint: nil,
+                dragSelectionEndClientPoint: nil
             )
         }
 
@@ -115,12 +156,20 @@ private struct ObserverReadyMetadata {
         let clientPoint = Self.point(from: initialState["caret_client_point"])
         let clickAfterInputScreenPoint = Self.point(from: initialState["click_after_input_screen_point"])
         let clickAfterInputClientPoint = Self.point(from: initialState["click_after_input_client_point"])
+        let dragSelectionStartScreenPoint = Self.point(from: initialState["drag_selection_start_screen_point"])
+        let dragSelectionStartClientPoint = Self.point(from: initialState["drag_selection_start_client_point"])
+        let dragSelectionEndScreenPoint = Self.point(from: initialState["drag_selection_end_screen_point"])
+        let dragSelectionEndClientPoint = Self.point(from: initialState["drag_selection_end_client_point"])
 
         return ObserverReadyMetadata(
             initialCaretScreenPoint: screenPoint,
             initialCaretClientPoint: clientPoint,
             clickAfterInputScreenPoint: clickAfterInputScreenPoint,
-            clickAfterInputClientPoint: clickAfterInputClientPoint
+            clickAfterInputClientPoint: clickAfterInputClientPoint,
+            dragSelectionStartScreenPoint: dragSelectionStartScreenPoint,
+            dragSelectionStartClientPoint: dragSelectionStartClientPoint,
+            dragSelectionEndScreenPoint: dragSelectionEndScreenPoint,
+            dragSelectionEndClientPoint: dragSelectionEndClientPoint
         )
     }
 
@@ -137,6 +186,19 @@ private struct ObserverReadyMetadata {
 
 private func adjustedClickPoint(_ point: CGPoint) -> CGPoint {
     CGPoint(x: point.x + clickScreenDX, y: point.y + clickScreenDY)
+}
+
+private func observedScreenPoint(
+    clientPoint: CGPoint?,
+    screenPoint: CGPoint?,
+    focusedApp: NSRunningApplication
+) -> CGPoint? {
+    if let clientPoint,
+       let webAreaFrame = focusedWebAreaFrame(for: focusedApp) {
+        return CGPoint(x: webAreaFrame.minX + clientPoint.x, y: webAreaFrame.minY + clientPoint.y)
+    }
+
+    return screenPoint
 }
 
 private final class SeededDelayGenerator {
@@ -463,6 +525,107 @@ private func typeClickMoveContinueSequence(
     try verifyHisleCLIMode("roman", stage: "Click move Escape")
 }
 
+private func typeDragSelectionInputSequence(
+    keyboard: KeyboardDriver,
+    delays: SeededDelayGenerator,
+    selectionStartPoint: CGPoint,
+    selectionEndPoint: CGPoint
+) throws {
+    print("Typing Chrome IME drag-selection-input sequence")
+    try verifyHisleCLIMode("roman", stage: "Drag selection input initial mode")
+    print("Dragging textarea selection from \(selectionStartPoint) to \(selectionEndPoint)")
+    try dragScreenPoint(
+        from: selectionStartPoint,
+        to: selectionEndPoint,
+        description: "Chrome textarea selection"
+    )
+    try tapModifier(KeyCode.rightShift, keyboard: keyboard, delays: delays, flag: .maskShift)
+    try verifyHisleCLIMode("hangul", stage: "Drag selection input right Shift")
+    try tapKey(KeyCode.j, keyboard: keyboard, delays: delays)
+    Thread.sleep(forTimeInterval: TimeInterval(idleMilliseconds) / 1000.0)
+}
+
+private func typeSelectedRangeInputSequence(
+    keyboard: KeyboardDriver,
+    delays: SeededDelayGenerator
+) throws {
+    print("Typing Chrome IME selected-range-input sequence")
+    try verifyHisleCLIMode("roman", stage: "Selected range input initial mode")
+    try tapModifier(KeyCode.rightShift, keyboard: keyboard, delays: delays, flag: .maskShift)
+    try verifyHisleCLIMode("hangul", stage: "Selected range input right Shift")
+    try tapKey(KeyCode.j, keyboard: keyboard, delays: delays)
+    Thread.sleep(forTimeInterval: TimeInterval(idleMilliseconds) / 1000.0)
+}
+
+private func typeSelectedRangeNumbersSequence(
+    keyboard: KeyboardDriver,
+    delays: SeededDelayGenerator
+) throws {
+    print("Typing Chrome IME selected-range-numbers sequence")
+    try verifyHisleCLIMode("roman", stage: "Selected range numbers initial mode")
+    try tapModifier(KeyCode.rightShift, keyboard: keyboard, delays: delays, flag: .maskShift)
+    try verifyHisleCLIMode("hangul", stage: "Selected range numbers right Shift")
+
+    for keyCode in [
+        KeyCode.one,
+        KeyCode.two,
+        KeyCode.three,
+    ] {
+        try tapKey(keyCode, keyboard: keyboard, delays: delays)
+    }
+
+    Thread.sleep(forTimeInterval: TimeInterval(idleMilliseconds) / 1000.0)
+}
+
+private func typeSelectedRangeAnnyeonghaseyoSequence(
+    keyboard: KeyboardDriver,
+    delays: SeededDelayGenerator,
+    scenarioName: String = "selected-range-annyeonghaseyo"
+) throws {
+    print("Typing Chrome IME \(scenarioName) sequence")
+    try verifyHisleCLIMode("roman", stage: "\(scenarioName) initial mode")
+    try tapModifier(KeyCode.rightShift, keyboard: keyboard, delays: delays, flag: .maskShift)
+    try verifyHisleCLIMode("hangul", stage: "\(scenarioName) right Shift")
+
+    for keyCode in [
+        KeyCode.j, KeyCode.f, KeyCode.s,
+        KeyCode.h, KeyCode.e, KeyCode.a,
+        KeyCode.m, KeyCode.f,
+        KeyCode.n, KeyCode.c,
+        KeyCode.j, KeyCode.four,
+    ] {
+        try tapKey(keyCode, keyboard: keyboard, delays: delays)
+    }
+
+    Thread.sleep(forTimeInterval: TimeInterval(idleMilliseconds) / 1000.0)
+}
+
+private func typeDoubleClickSelectionAnnyeonghaseyoSequence(
+    keyboard: KeyboardDriver,
+    delays: SeededDelayGenerator,
+    clickPoint: CGPoint
+) throws {
+    print("Typing Chrome IME double-click-selection-annyeonghaseyo sequence")
+    try verifyHisleCLIMode("roman", stage: "Double click selection initial mode")
+    Thread.sleep(forTimeInterval: 0.7)
+    print("Double-clicking content word at \(clickPoint)")
+    try doubleClickScreenPoint(clickPoint, description: "Chrome double-click word selection")
+    try tapModifier(KeyCode.rightShift, keyboard: keyboard, delays: delays, flag: .maskShift)
+    try verifyHisleCLIMode("hangul", stage: "Double click selection right Shift")
+
+    for keyCode in [
+        KeyCode.j, KeyCode.f, KeyCode.s,
+        KeyCode.h, KeyCode.e, KeyCode.a,
+        KeyCode.m, KeyCode.f,
+        KeyCode.n, KeyCode.c,
+        KeyCode.j, KeyCode.four,
+    ] {
+        try tapKey(keyCode, keyboard: keyboard, delays: delays)
+    }
+
+    Thread.sleep(forTimeInterval: TimeInterval(idleMilliseconds) / 1000.0)
+}
+
 private func runChromeDriver() throws {
     let options = try DriverOptions.parse(arguments: Array(CommandLine.arguments.dropFirst()))
     try requireAccessibilityPermission(rerunCommand: "make chrome-ime-repro")
@@ -499,12 +662,19 @@ private func runChromeDriver() throws {
         }
     }
 
-    let shouldClickToFocus = !skipFocusClick && chromeScenario != "click-during-composition"
+    let shouldClickToFocus = !skipFocusClick &&
+        chromeScenario != "click-during-composition" &&
+        chromeScenario != "selected-range-input" &&
+        chromeScenario != "selected-range-numbers" &&
+        chromeScenario != "selected-range-annyeonghaseyo" &&
+        chromeScenario != "stale-selection-annyeonghaseyo" &&
+        chromeScenario != "double-click-selection-annyeonghaseyo"
     let app = try focusChromeTestWindow(allowFocusClick: shouldClickToFocus)
     if shouldClickToFocus {
         try clickFocusedWindowCenter(of: app, appName: chromeAppName)
     }
 
+    let runtimeIdentityLogStartDate = Date()
     print("Selecting hisle input source: \(hisleInputSourceID)")
     try selectInputSource(id: hisleInputSourceID)
     didSelectHisle = true
@@ -567,10 +737,60 @@ private func runChromeDriver() throws {
             throw GuiTestFailure.message("HISLE_CHROME_CLICK_AFTER_INPUT_CARET is required for click-move-continue.")
         }
         try typeClickMoveContinueSequence(keyboard: keyboard, delays: delays, clickPoint: adjustedClickPoint(point))
+    case "drag-selection-input":
+        let startPoint = observedScreenPoint(
+            clientPoint: observerReady.dragSelectionStartClientPoint,
+            screenPoint: observerReady.dragSelectionStartScreenPoint,
+            focusedApp: focusedApp
+        )
+        let endPoint = observedScreenPoint(
+            clientPoint: observerReady.dragSelectionEndClientPoint,
+            screenPoint: observerReady.dragSelectionEndScreenPoint,
+            focusedApp: focusedApp
+        )
+        guard let startPoint, let endPoint else {
+            throw GuiTestFailure.message("HISLE_CHROME_DRAG_SELECTION is required for drag-selection-input.")
+        }
+        try typeDragSelectionInputSequence(
+            keyboard: keyboard,
+            delays: delays,
+            selectionStartPoint: adjustedClickPoint(startPoint),
+            selectionEndPoint: adjustedClickPoint(endPoint)
+        )
+    case "selected-range-input":
+        try typeSelectedRangeInputSequence(keyboard: keyboard, delays: delays)
+    case "selected-range-numbers":
+        try typeSelectedRangeNumbersSequence(keyboard: keyboard, delays: delays)
+    case "selected-range-annyeonghaseyo":
+        try typeSelectedRangeAnnyeonghaseyoSequence(keyboard: keyboard, delays: delays)
+    case "stale-selection-annyeonghaseyo":
+        try typeSelectedRangeAnnyeonghaseyoSequence(
+            keyboard: keyboard,
+            delays: delays,
+            scenarioName: chromeScenario
+        )
+    case "double-click-selection-annyeonghaseyo":
+        let point = observedScreenPoint(
+            clientPoint: observerReady.initialCaretClientPoint,
+            screenPoint: observerReady.initialCaretScreenPoint,
+            focusedApp: focusedApp
+        )
+        guard let point else {
+            throw GuiTestFailure.message("HISLE_CHROME_INITIAL_CARET is required for double-click-selection-annyeonghaseyo.")
+        }
+        try typeDoubleClickSelectionAnnyeonghaseyoSequence(
+            keyboard: keyboard,
+            delays: delays,
+            clickPoint: adjustedClickPoint(point)
+        )
     default:
         throw GuiTestFailure.message("Unsupported HISLE_CHROME_SCENARIO: \(chromeScenario)")
     }
     try keyLogger.throwIfFailed()
+    writeRuntimeIdentityLog(
+        to: options.runDirectory.appendingPathComponent("runtime-identity.log"),
+        since: runtimeIdentityLogStartDate
+    )
     print("Chrome IME HID sequence completed. Target: \(chromeTargetKind). Scenario: \(chromeScenario). Expected final value: \(String(reflecting: expectedText))")
 }
 

@@ -13,10 +13,13 @@ const iterations = Number(process.env.ITERATIONS ?? '1');
 const targetKind = process.env.HISLE_CHROME_TARGET ?? 'textarea';
 const initialText = process.env.HISLE_CHROME_INITIAL_TEXT ?? '';
 const initialCaretText = process.env.HISLE_CHROME_INITIAL_CARET ?? '';
+const initialSelectionText = process.env.HISLE_CHROME_INITIAL_SELECTION ?? '';
+const initialDoubleClick = process.env.HISLE_CHROME_INITIAL_DOUBLE_CLICK === '1';
 const initialRender = nonEmptyEnv('HISLE_CHROME_INITIAL_RENDER', 'text');
 const moveAfterCompositionCaretText = process.env.HISLE_CHROME_MOVE_AFTER_COMPOSITION_CARET ?? '';
 const moveAfterInputCaretText = process.env.HISLE_CHROME_MOVE_AFTER_INPUT_CARET ?? '';
 const clickAfterInputCaretText = process.env.HISLE_CHROME_CLICK_AFTER_INPUT_CARET ?? '';
+const dragSelectionText = process.env.HISLE_CHROME_DRAG_SELECTION ?? '';
 const forceRenderOnCompositionEnd = process.env.HISLE_CHROME_FORCE_RENDER_ON_COMPOSITION_END === '1';
 const editorChaos = process.env.HISLE_CHROME_EDITOR_CHAOS ?? '';
 const chaosDelayMilliseconds = numberFromEnv('HISLE_CHROME_CHAOS_DELAY_MS', 650);
@@ -46,7 +49,7 @@ try {
   if (!['text', 'spans', 'paragraphs'].includes(initialRender)) {
     throw new Error(`Unsupported HISLE_CHROME_INITIAL_RENDER: ${initialRender}`);
   }
-  if (!['', 'idle-normalize', 'focus-pulse', 'active-rerender', 'active-rerender-focus-pulse'].includes(editorChaos)) {
+  if (!['', 'idle-normalize', 'focus-pulse', 'active-rerender', 'active-rerender-focus-pulse', 'restore-initial-selection'].includes(editorChaos)) {
     throw new Error(`Unsupported HISLE_CHROME_EDITOR_CHAOS: ${editorChaos}`);
   }
   await startBrowser();
@@ -214,10 +217,12 @@ async function installTestPage(targetPage) {
     kind,
     initialText,
     initialCaretText,
+    initialSelectionText,
     initialRender,
     moveAfterCompositionCaretText,
     moveAfterInputCaretText,
     clickAfterInputCaretText,
+    dragSelectionText,
     forceRenderOnCompositionEnd,
     editorChaos,
     chaosDelayMilliseconds,
@@ -226,9 +231,11 @@ async function installTestPage(targetPage) {
     const isTextarea = target instanceof HTMLTextAreaElement;
     const isWysiwyg = kind === 'wysiwyg';
     const initialCaret = initialCaretText === '' ? null : Number(initialCaretText);
+    const initialSelection = parseOffsetRange(initialSelectionText);
     const moveAfterCompositionCaret = moveAfterCompositionCaretText === '' ? null : Number(moveAfterCompositionCaretText);
     const moveAfterInputCaret = moveAfterInputCaretText === '' ? null : Number(moveAfterInputCaretText);
     const clickAfterInputCaret = clickAfterInputCaretText === '' ? null : Number(clickAfterInputCaretText);
+    const dragSelection = parseOffsetRange(dragSelectionText);
     let idleTimer = null;
     let compositionEndCount = 0;
     let inputCount = 0;
@@ -288,6 +295,25 @@ async function installTestPage(targetPage) {
         }
       }
       return isTextarea ? target.value : target.textContent ?? '';
+    }
+
+    function parseOffsetRange(text) {
+      if (!text) {
+        return null;
+      }
+
+      const parts = text.split(':');
+      if (parts.length !== 2) {
+        throw new Error(`HISLE_CHROME_DRAG_SELECTION must use start:end syntax, got ${text}`);
+      }
+
+      const start = Number(parts[0]);
+      const end = Number(parts[1]);
+      if (!Number.isFinite(start) || !Number.isFinite(end)) {
+        throw new Error(`HISLE_CHROME_DRAG_SELECTION offsets must be finite numbers, got ${text}`);
+      }
+
+      return { start, end };
     }
 
     function textOffset(container, offset) {
@@ -378,15 +404,10 @@ async function installTestPage(targetPage) {
       });
     }
 
-    function setTextSelectionByOffset(offset) {
-      if (isTextarea) {
-        const bounded = Math.max(0, Math.min(offset, target.value.length));
-        target.setSelectionRange(bounded, bounded);
-        return true;
-      }
+    function textLocationForOffset(offset) {
+      const bounded = Math.max(0, Math.min(offset, targetValue().length));
 
       if (initialRender === 'paragraphs') {
-        const bounded = Math.max(0, Math.min(offset, targetValue().length));
         let remaining = bounded;
         const lines = Array.from(target.querySelectorAll('[data-line]'));
         for (const [lineIndex, line] of lines.entries()) {
@@ -397,37 +418,18 @@ async function installTestPage(targetPage) {
             let node = walker.nextNode();
             while (node) {
               if (textRemaining <= node.data.length) {
-                const selection = window.getSelection();
-                const range = document.createRange();
-                range.setStart(node, textRemaining);
-                range.collapse(true);
-                selection.removeAllRanges();
-                selection.addRange(range);
-                return true;
+                return { node, offset: textRemaining };
               }
               textRemaining -= node.data.length;
               node = walker.nextNode();
             }
-
-            const selection = window.getSelection();
-            const range = document.createRange();
-            range.selectNodeContents(line);
-            range.collapse(false);
-            selection.removeAllRanges();
-            selection.addRange(range);
-            return true;
+            return { node: line, offset: line.childNodes.length };
           }
 
           remaining -= lineText.length;
           if (lineIndex < lines.length - 1) {
             if (remaining === 0) {
-              const selection = window.getSelection();
-              const range = document.createRange();
-              range.selectNodeContents(line);
-              range.collapse(false);
-              selection.removeAllRanges();
-              selection.addRange(range);
-              return true;
+              return { node: line, offset: line.childNodes.length };
             }
             remaining -= 1;
           }
@@ -435,40 +437,81 @@ async function installTestPage(targetPage) {
       }
 
       const walker = document.createTreeWalker(target, NodeFilter.SHOW_TEXT);
-      let remaining = Math.max(0, Math.min(offset, targetValue().length));
+      let remaining = bounded;
       let node = walker.nextNode();
       while (node) {
         if (remaining <= node.data.length) {
-          const selection = window.getSelection();
-          const range = document.createRange();
-          range.setStart(node, remaining);
-          range.collapse(true);
-          selection.removeAllRanges();
-          selection.addRange(range);
-          return true;
+          return { node, offset: remaining };
         }
         remaining -= node.data.length;
         node = walker.nextNode();
       }
 
+      return { node: target, offset: target.childNodes.length };
+    }
+
+    function setTextSelectionByOffset(offset) {
+      if (isTextarea) {
+        const bounded = Math.max(0, Math.min(offset, target.value.length));
+        target.setSelectionRange(bounded, bounded);
+        return true;
+      }
+
       const selection = window.getSelection();
       const range = document.createRange();
-      range.setStart(target, target.childNodes.length);
+      const location = textLocationForOffset(offset);
+      range.setStart(location.node, location.offset);
       range.collapse(true);
       selection.removeAllRanges();
       selection.addRange(range);
-      return false;
+      return true;
+    }
+
+    function setTextSelectionRangeByOffset(start, end) {
+      if (isTextarea) {
+        const boundedStart = Math.max(0, Math.min(start, target.value.length));
+        const boundedEnd = Math.max(0, Math.min(end, target.value.length));
+        target.setSelectionRange(boundedStart, boundedEnd);
+        return true;
+      }
+
+      const boundedStart = Math.max(0, Math.min(start, targetValue().length));
+      const boundedEnd = Math.max(0, Math.min(end, targetValue().length));
+      const selectionStart = Math.min(boundedStart, boundedEnd);
+      const selectionEnd = Math.max(boundedStart, boundedEnd);
+      const startLocation = textLocationForOffset(selectionStart);
+      const endLocation = textLocationForOffset(selectionEnd);
+      const selection = window.getSelection();
+      const range = document.createRange();
+      range.setStart(startLocation.node, startLocation.offset);
+      range.setEnd(endLocation.node, endLocation.offset);
+      selection.removeAllRanges();
+      selection.addRange(range);
+      return true;
     }
 
     function textPositionForOffset(offset) {
       const bounded = Math.max(0, Math.min(offset, targetValue().length));
       if (isTextarea) {
         const rect = target.getBoundingClientRect();
+        const style = window.getComputedStyle(target);
+        const paddingLeft = Number.parseFloat(style.paddingLeft) || 0;
+        const paddingTop = Number.parseFloat(style.paddingTop) || 0;
+        const fontSize = Number.parseFloat(style.fontSize) || 28;
+        const lineHeight = Number.parseFloat(style.lineHeight) || fontSize * 1.45;
+        const canvas = textPositionForOffset.canvas ?? document.createElement('canvas');
+        textPositionForOffset.canvas = canvas;
+        const context = canvas.getContext('2d');
+        const before = target.value.slice(0, bounded);
+        const lines = before.split('\n');
+        const lineText = lines.at(-1) ?? '';
+        context.font = style.font || `${style.fontSize} ${style.fontFamily}`;
+
         return {
-          x: rect.left + 24,
-          y: rect.top + 24,
+          x: rect.left + paddingLeft + context.measureText(lineText).width - target.scrollLeft,
+          y: rect.top + paddingTop + ((lines.length - 1) * lineHeight) + (lineHeight / 2) - target.scrollTop,
           offset: bounded,
-          estimated: true,
+          estimated: false,
         };
       }
 
@@ -681,6 +724,14 @@ async function installTestPage(targetPage) {
       target.dataset.composing = '0';
       rerenderWysiwygDOM({ force: forceRenderOnCompositionEnd });
       compositionEndCount += 1;
+      if (editorChaos === 'restore-initial-selection' && initialSelection != null) {
+        setTextSelectionRangeByOffset(initialSelection.start, initialSelection.end);
+        recordChaos('restore-initial-selection', {
+          target_selection_start: initialSelection.start,
+          target_selection_end: initialSelection.end,
+          composition_end_count: compositionEndCount,
+        });
+      }
       if (compositionEndCount === 1 &&
           moveAfterCompositionCaret != null &&
           Number.isFinite(moveAfterCompositionCaret)) {
@@ -711,7 +762,9 @@ async function installTestPage(targetPage) {
     });
 
     target.focus();
-    if (initialCaret != null && Number.isFinite(initialCaret)) {
+    if (initialSelection != null) {
+      setTextSelectionRangeByOffset(initialSelection.start, initialSelection.end);
+    } else if (initialCaret != null && Number.isFinite(initialCaret)) {
       setTextSelectionByOffset(initialCaret);
     } else if (!isTextarea && initialText) {
       const selection = window.getSelection();
@@ -726,9 +779,12 @@ async function installTestPage(targetPage) {
     const clickAfterInputClientPoint = clickAfterInputCaret != null && Number.isFinite(clickAfterInputCaret)
       ? textPositionForOffset(clickAfterInputCaret)
       : null;
+    const dragSelectionStartClientPoint = dragSelection ? textPositionForOffset(dragSelection.start) : null;
+    const dragSelectionEndClientPoint = dragSelection ? textPositionForOffset(dragSelection.end) : null;
     window.__hisleInitialState = {
       value: targetValue(),
       html: isTextarea ? null : target.innerHTML,
+      initial_selection: initialSelection,
       selection_start: selection.selection_start,
       selection_end: selection.selection_end,
       selection_anchor: selection.selection_anchor,
@@ -746,22 +802,98 @@ async function installTestPage(targetPage) {
       estimated_screen_point: estimatedScreenPointForClientPoint(caretClientPoint),
       click_after_input_client_point: clickAfterInputClientPoint,
       click_after_input_screen_point: estimatedScreenPointForClientPoint(clickAfterInputClientPoint),
+      drag_selection: dragSelection,
+      drag_selection_start_client_point: dragSelectionStartClientPoint,
+      drag_selection_end_client_point: dragSelectionEndClientPoint,
+      drag_selection_start_screen_point: estimatedScreenPointForClientPoint(dragSelectionStartClientPoint),
+      drag_selection_end_screen_point: estimatedScreenPointForClientPoint(dragSelectionEndClientPoint),
     };
     window.__hisleReady = document.activeElement === target;
   }, {
     kind: targetKind,
     initialText,
     initialCaretText,
+    initialSelectionText,
     initialRender,
     moveAfterCompositionCaretText,
     moveAfterInputCaretText,
     clickAfterInputCaretText,
+    dragSelectionText,
     forceRenderOnCompositionEnd,
     editorChaos,
     chaosDelayMilliseconds,
   });
 
   await targetPage.waitForFunction(() => window.__hisleReady === true);
+  if (initialDoubleClick) {
+    const point = await targetPage.evaluate(() => window.__hisleInitialState?.caret_client_point ?? null);
+    if (!point) {
+      throw new Error('HISLE_CHROME_INITIAL_DOUBLE_CLICK requires a resolvable initial caret point.');
+    }
+
+    await targetPage.mouse.dblclick(point.x, point.y);
+    await targetPage.waitForTimeout(150);
+    await targetPage.evaluate(() => {
+      const target = document.getElementById('target');
+      const isTextarea = target instanceof HTMLTextAreaElement;
+
+      function textOffset(container, offset) {
+        if (!container || !target.contains(container)) {
+          return null;
+        }
+
+        const range = document.createRange();
+        range.selectNodeContents(target);
+        try {
+          range.setEnd(container, offset);
+        } catch {
+          return null;
+        }
+        return range.toString().length;
+      }
+
+      function selectionState() {
+        if (isTextarea) {
+          return {
+            selection_start: target.selectionStart,
+            selection_end: target.selectionEnd,
+            selection_anchor: target.selectionStart,
+            selection_focus: target.selectionEnd,
+          };
+        }
+
+        const selection = window.getSelection();
+        if (!selection || selection.rangeCount === 0) {
+          return {
+            selection_start: null,
+            selection_end: null,
+            selection_anchor: null,
+            selection_focus: null,
+          };
+        }
+
+        const range = selection.getRangeAt(0);
+        return {
+          selection_start: textOffset(range.startContainer, range.startOffset),
+          selection_end: textOffset(range.endContainer, range.endOffset),
+          selection_anchor: textOffset(selection.anchorNode, selection.anchorOffset),
+          selection_focus: textOffset(selection.focusNode, selection.focusOffset),
+        };
+      }
+
+      const selection = selectionState();
+      window.__hisleInitialState = {
+        ...window.__hisleInitialState,
+        value: isTextarea ? target.value : target.textContent ?? '',
+        html: isTextarea ? null : target.innerHTML,
+        double_clicked: true,
+        selection_start: selection.selection_start,
+        selection_end: selection.selection_end,
+        selection_anchor: selection.selection_anchor,
+        selection_focus: selection.selection_focus,
+      };
+    });
+  }
   await targetPage.bringToFront();
 }
 
@@ -824,9 +956,12 @@ async function writeReadyFile() {
     target_kind: targetKind,
     initial_text: initialText,
     initial_caret: initialCaretText || null,
+    initial_selection: initialSelectionText || null,
+    initial_double_click: initialDoubleClick,
     initial_render: initialRender,
     move_after_composition_caret: moveAfterCompositionCaretText || null,
     move_after_input_caret: moveAfterInputCaretText || null,
+    drag_selection: dragSelectionText || null,
     force_render_on_composition_end: forceRenderOnCompositionEnd,
     editor_chaos: editorChaos || null,
     chaos_delay_milliseconds: chaosDelayMilliseconds,
