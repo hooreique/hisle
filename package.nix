@@ -7,13 +7,13 @@
 
 stdenvNoCC.mkDerivation (finalAttrs: {
   pname = "hisle";
-  version = "0.1.5";
+  version = "0.1.6";
 
   src = fetchurl {
     url =
       "https://github.com/hooreique/hisle/releases/download/v${finalAttrs.version}/"
       + "hisle-${finalAttrs.version}.dmg";
-    hash = "sha256-Q0oky58GhTlSpAr17xwP/FMmzK707a9iPkl6GkW9fcU=";
+    hash = "sha256-UUY7qBoyEFPNZw/d+XZ6VO2k6yMX04qUAaNRc3PxHhA=";
   };
 
   nativeBuildInputs = [
