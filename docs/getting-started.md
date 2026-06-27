@@ -20,6 +20,52 @@ Short version:
 
 If `hisle` does not appear in Input Sources, log out and back in.
 
+## Install With Home Manager
+
+In an existing Home Manager flake, add the `hisle` input, apply the overlay to
+the `pkgs` passed to Home Manager, import the module, and enable the program:
+
+```nix
+{
+  inputs.hisle.url = "github:hooreique/hisle";
+
+  outputs =
+    {
+      hisle,
+      home-manager,
+      nixpkgs,
+      ...
+    }:
+    {
+      homeConfigurations."USER" = home-manager.lib.homeManagerConfiguration {
+        pkgs = import nixpkgs {
+          system = "aarch64-darwin";
+          overlays = [ hisle.overlay ];
+        };
+
+        modules = [
+          hisle.homeManagerModule
+          {
+            programs.hisle.enable = true;
+          }
+        ];
+      };
+    };
+}
+```
+
+This copies the packaged app bundle to
+`~/Library/Input Methods/hisle.app`. Then add and select `hisle` in System
+Settings > Keyboard > Input Sources.
+
+When updating or removing an existing copied app, macOS may require App
+Management permission. If activation fails with a permission error, run Home
+Manager from a graphical session, grant the permission in System Settings >
+Privacy & Security > App Management, then try again.
+
+Disabling `programs.hisle.enable` removes the copied
+`~/Library/Input Methods/hisle.app` bundle on the next Home Manager switch.
+
 ## Build And Install From Source
 
 Use the Make target instead of launching the input method from Xcode:

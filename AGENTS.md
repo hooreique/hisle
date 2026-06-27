@@ -40,7 +40,8 @@
 - `hisle/AppIcon.icon/`, `hisle/Assets.xcassets/`, `hisle/Resources/`, and
   `tools/icons/` contain app and input-method icon sources and outputs.
 - `hisle/Info.plist` contains input method metadata consumed by macOS.
-- `flake.nix` and `package.nix` contain Nix shells and the release DMG package.
+- `flake.nix`, `home-manager.nix`, and `package.nix` contain Nix shells, the
+  Home Manager module, and the release DMG package.
 - `build-info.nix` contains the approved release version and DMG hash consumed
   by `package.nix`.
 - `tools/` contains local Nushell build, install, package, test, and icon

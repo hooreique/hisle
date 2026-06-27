@@ -83,11 +83,28 @@ helpers so Xcode does not inherit Nix toolchain settings.
 ## Nix Package
 
 `package.nix` packages the signed release DMG exposed as
-`packages.aarch64-darwin.hisle`. It imports the pinned release version and DMG
-file hash from `build-info.nix`, extracts the matching GitHub release asset with
-`undmg`, and installs `hisle.app` under `$out/Applications/`. Do not enable
-fixup phases that rewrite the bundled app or helper binaries, because that
-would invalidate release code signatures.
+`packages.aarch64-darwin.hisle`, `packages.aarch64-darwin.default`, and through
+the `overlay` output as `pkgs.hisle`.
+It imports the pinned release version and DMG file hash from `build-info.nix`,
+extracts the matching GitHub release asset with `undmg`, and installs
+`hisle.app` under `$out/Library/Input Methods/` so the package mirrors the
+macOS input method install location. Do not enable fixup phases that rewrite the
+bundled app or helper binaries, because that would invalidate release code
+signatures.
+
+`home-manager.nix` is exposed as the `homeManagerModule` output. When
+`programs.hisle.enable` is true, it manages
+`~/Library/Input Methods/hisle.app` by copying the app bundle from
+`programs.hisle.package`, defaulting that package to `pkgs.hisle`. Keep this as
+a real copy rather than a `home.file` symlink because macOS input methods are
+not reliably discovered from symlinked app bundles. The copy step follows Home
+Manager's Darwin app-copying policy: use `rsync`, preserve app-internal
+relative links, convert unsafe store links into real files, delete stale files,
+make the copied tree writable, and avoid preserving Nix store mtimes.
+App Management permission failures are left to the `rm` or `rsync` activation
+step that triggered them. When `programs.hisle.enable` is false on Darwin, the
+module removes
+`~/Library/Input Methods/hisle.app`.
 
 `build-info.nix` is updated during release promotion by the `Package Release`
 workflow, not during DMG candidate builds. Release promotion should update only

@@ -41,8 +41,8 @@ stdenvNoCC.mkDerivation (finalAttrs: {
     runHook preInstall
 
     test -d hisle.app
-    mkdir -p "$out/Applications"
-    cp -R hisle.app "$out/Applications/"
+    mkdir -p "$out/Library/Input Methods"
+    cp -R hisle.app "$out/Library/Input Methods/"
 
     runHook postInstall
   '';

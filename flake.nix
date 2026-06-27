@@ -6,13 +6,12 @@
   outputs =
     inputs:
     let
-      system = "aarch64-darwin";
-      pkgs = inputs.nixpkgs.legacyPackages.${system};
-      commonShellHook = ''
+      pkgs = inputs.nixpkgs.legacyPackages.aarch64-darwin;
+      shellHook = ''
         export PATH="$PATH:/usr/bin:/bin"
         export NIX_CC_WRAPPER_SUPPRESS_TARGET_WARNING=1
       '';
-      commonPackages = [
+      packages = [
         pkgs.nushell
         pkgs.swift
         pkgs.swiftpm
@@ -20,37 +19,41 @@
       ];
     in
     {
-      packages.${system}.hisle = pkgs.callPackage ./package.nix { };
+      homeManagerModule = ./home-manager.nix;
 
-      devShells.${system} = {
-        default = pkgs.mkShell {
-          packages = commonPackages;
-          shellHook = commonShellHook;
-        };
+      overlay = final: prev: {
+        hisle = final.callPackage ./package.nix { };
+      };
 
-        xcode-work = pkgs.mkShell {
-          packages = commonPackages;
-          shellHook = commonShellHook + ''
-            if [ -d /Applications/Xcode.app/Contents/Developer ]; then
-              export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
-            fi
-          '';
-        };
+      packages.aarch64-darwin.default = pkgs.callPackage ./package.nix { };
+      packages.aarch64-darwin.hisle = pkgs.callPackage ./package.nix { };
 
-        icon-work = pkgs.mkShell {
-          packages = commonPackages ++ [
-            pkgs.imagemagick
-            pkgs.resvg
-          ];
-          shellHook = commonShellHook;
-        };
+      devShells.aarch64-darwin.default = pkgs.mkShell {
+        inherit packages shellHook;
+      };
 
-        browser-work = pkgs.mkShell {
-          packages = commonPackages ++ [
-            pkgs.nodejs
-          ];
-          shellHook = commonShellHook;
-        };
+      devShells.aarch64-darwin.xcode-work = pkgs.mkShell {
+        inherit packages;
+        shellHook = shellHook + ''
+          if [ -d /Applications/Xcode.app/Contents/Developer ]; then
+            export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
+          fi
+        '';
+      };
+
+      devShells.aarch64-darwin.icon-work = pkgs.mkShell {
+        inherit shellHook;
+        packages = packages ++ [
+          pkgs.imagemagick
+          pkgs.resvg
+        ];
+      };
+
+      devShells.aarch64-darwin.browser-work = pkgs.mkShell {
+        inherit shellHook;
+        packages = packages ++ [
+          pkgs.nodejs
+        ];
       };
     };
 }
