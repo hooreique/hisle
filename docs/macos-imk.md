@@ -95,6 +95,15 @@ no-option output is part of the smoke test.
 
 ## Logging
 
+All builds emit `controller runtime` lifecycle notices when an input method
+controller is initialized or activated. Each notice includes `stage`,
+`buildProfile`, `appVersion`, `build`, `pid`, `bundle`, and
+`replacementPolicy` so Debug and Release binaries can be matched to the
+installed app being tested, even when a manual `log stream` starts after the
+process was launched. The `buildProfile` field is `debug` or `release`; the
+`build` field comes from `CFBundleVersion`, which is owned by
+`CURRENT_PROJECT_VERSION`.
+
 Debug builds can opt into noisy IMK client range traces with the
 `traceClientRanges` defaults key or `HISLE_TRACE_CLIENT_RANGES=1`; see
 `docs/testing.md`.

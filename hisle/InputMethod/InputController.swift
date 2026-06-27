@@ -11,10 +11,12 @@ final class InputController: IMKInputController {
             HisleInputModeState.write(sharedInputMode)
         }
     }
-#if DEBUG
     private static let replacementRangePolicyID = "current-selection-nsnotfound+marked-continuation"
+#if DEBUG
+    private static let buildProfile = "debug"
+#else
+    private static let buildProfile = "release"
 #endif
-
     private var hangulEngine = InputController.makeEngine()
     private var hasMarkedText = false
     private var currentMarkedText = ""
@@ -33,18 +35,15 @@ final class InputController: IMKInputController {
     override init!(server: IMKServer!, delegate: Any!, client inputClient: Any!) {
         super.init(server: server, delegate: delegate, client: inputClient)
         HisleInputModeState.write(inputMode)
-        logger.notice("controller initialized")
+        logRuntimeIdentity(stage: "initialized")
 #if DEBUG
-        logRuntimeIdentity(stage: "init")
         logger.debug("controller client=\(String(describing: inputClient), privacy: .public)")
 #endif
     }
 
     override func activateServer(_ sender: Any!) {
         KeyboardLayoutOverride.installColemak(for: sender ?? client(), logSuccess: true)
-#if DEBUG
-        logRuntimeIdentity(stage: "activate")
-#endif
+        logRuntimeIdentity(stage: "activated")
         super.activateServer(sender)
     }
 
@@ -165,7 +164,6 @@ final class InputController: IMKInputController {
         }
     }
 
-#if DEBUG
     private static func bundleInfoValue(for key: String) -> String {
         guard let value = Bundle.main.object(forInfoDictionaryKey: key) as? String,
               !value.isEmpty else {
@@ -176,10 +174,9 @@ final class InputController: IMKInputController {
 
     private func logRuntimeIdentity(stage: String) {
         logger.notice(
-            "controller runtime stage=\(stage, privacy: .public) appVersion=\(Self.bundleInfoValue(for: "CFBundleShortVersionString"), privacy: .public) build=\(Self.bundleInfoValue(for: "CFBundleVersion"), privacy: .public) pid=\(ProcessInfo.processInfo.processIdentifier, privacy: .public) bundle=\(Bundle.main.bundleURL.path, privacy: .public) replacementPolicy=\(Self.replacementRangePolicyID, privacy: .public)"
+            "controller runtime stage=\(stage, privacy: .public) buildProfile=\(Self.buildProfile, privacy: .public) appVersion=\(Self.bundleInfoValue(for: "CFBundleShortVersionString"), privacy: .public) build=\(Self.bundleInfoValue(for: "CFBundleVersion"), privacy: .public) pid=\(ProcessInfo.processInfo.processIdentifier, privacy: .public) bundle=\(Bundle.main.bundleURL.path, privacy: .public) replacementPolicy=\(Self.replacementRangePolicyID, privacy: .public)"
         )
     }
-#endif
 
     private func handleKeyInput(
         text: String?,

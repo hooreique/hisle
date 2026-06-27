@@ -63,14 +63,16 @@ extension and should contain a short phrase such as `in progress`, `fixed`,
 `stuck`, or `needs repro`. Update it when the bug's state changes and again
 when the fix lands.
 
-## Debug Version Identity
+## Runtime Version Identity
 
 After changing the installed app binary during investigation, confirm that the
 running binary is the one you intended to test. Inspect the
 `controller runtime` log entry, or the Chrome IME reproduction's
-`build/chrome-ime/<run-id>/runtime-identity.log`, and check that `build=`
-matches the current `CURRENT_PROJECT_VERSION` and `bundle=` points to the
-installed debug app under `~/Library/Input Methods/hisle.app`.
+`build/chrome-ime/<run-id>/runtime-identity.log`, and check that
+`buildProfile=` is the expected `debug` or `release`, `build=` matches the
+current `CURRENT_PROJECT_VERSION`, and `bundle=` points to the installed app
+under `~/Library/Input Methods/hisle.app`. All builds include this identity on
+controller initialization and activation lifecycle logs.
 
 Run `make version-check` whenever version declarations are changed.
 
