@@ -1,4 +1,4 @@
-name: Release DMG
+name: Build DMG
 
 on:
   workflow_dispatch:
@@ -10,7 +10,7 @@ jobs:
     environment: release
     timeout-minutes: 75
     permissions:
-      contents: write
+      contents: read
 
     steps:
       - name: Checkout
@@ -86,11 +86,13 @@ jobs:
           fi
 
           {
+            echo "APP_VERSION=$app_version"
             echo "RELEASE_TAG=$release_tag"
             echo "DMG_PATH=$dmg_path"
           } >> "$GITHUB_ENV"
 
           {
+            echo "app_version=$app_version"
             echo "dmg_path=$dmg_path"
             echo "artifact_name=$artifact_name"
           } >> "$GITHUB_OUTPUT"
@@ -121,6 +123,12 @@ jobs:
           path: build/notary
           if-no-files-found: ignore
 
+      - name: Validate stapled DMG ticket
+        run: |
+          set -euo pipefail
+
+          /usr/bin/xcrun stapler validate "$DMG_PATH"
+
       - name: Validate DMG extraction with undmg
         run: |
           set -euo pipefail
@@ -136,6 +144,21 @@ jobs:
             exit 1
           fi
 
+      - name: Export DMG file hash
+        id: dmg_hash
+        run: |
+          set -euo pipefail
+
+          dmg_nix_hash="$(nix hash file --type sha256 --sri "$DMG_PATH")"
+
+          {
+            echo "DMG_NIX_HASH=$dmg_nix_hash"
+          } >> "$GITHUB_ENV"
+
+          {
+            echo "dmg_nix_hash=$dmg_nix_hash"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Upload DMG artifact
         uses: actions/upload-artifact@v7
         with:
@@ -143,30 +166,20 @@ jobs:
           path: ${{ steps.release_metadata.outputs.dmg_path }}
           if-no-files-found: error
 
-      - name: Create draft GitHub Release
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Summarize release candidate
         run: |
           set -euo pipefail
 
-          if git ls-remote --exit-code --tags origin "refs/tags/$RELEASE_TAG" >/dev/null 2>&1; then
-            echo "::error::Tag $RELEASE_TAG already exists"
-            exit 1
-          fi
-
-          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            echo "::error::Release $RELEASE_TAG already exists"
-            exit 1
-          fi
-
-          git tag "$RELEASE_TAG" "$GITHUB_SHA"
-          git push origin "refs/tags/$RELEASE_TAG"
-
-          gh release create "$RELEASE_TAG" "$DMG_PATH" \
-            --draft \
-            --verify-tag \
-            --title "$RELEASE_TAG" \
-            --notes ""
+          {
+            echo "## Release candidate"
+            echo ""
+            echo "| Field | Value |"
+            echo "| --- | --- |"
+            echo "| Version | \`$APP_VERSION\` |"
+            echo "| DMG SHA | \`$DMG_NIX_HASH\` |"
+            echo "| DMG path | \`$DMG_PATH\` |"
+            echo "| Tag to package | \`$RELEASE_TAG\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Delete temporary keychain
         if: always()

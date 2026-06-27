@@ -2,7 +2,7 @@
 
 This document covers local DMG packaging, Developer ID signing, notarization,
 and stapling. Read it before changing `tools/package_dmg.nu`,
-`tools/notary.nu`, release signing settings, or the release workflow that calls
+`tools/notary.nu`, release signing settings, or release workflows that call
 these tools.
 
 ## Commands
@@ -25,6 +25,28 @@ Direct notarization and staple script for a signed DMG:
 nix develop --command -- nu tools/notary.nu
 ```
 
+## Release Workflow
+
+Use the manual `Build DMG` GitHub Actions workflow to create a release
+candidate. It builds, signs, notarizes, staples, validates, and uploads one DMG
+artifact. This workflow does not create a tag or GitHub Release.
+
+Inspect the candidate DMG manually before promotion. The build summary prints
+the app version and the final stapled DMG's Nix SRI SHA-256 hash, which are the
+inputs for the manual `Package Release` workflow. The same hash can be
+recomputed from a downloaded candidate with:
+
+```sh
+nix hash file --type sha256 --sri hisle-VERSION.dmg
+```
+
+Promote the latest successful `Build DMG` run on `main` by running
+`Package Release` with the approved version and DMG hash. The package workflow
+downloads that build's artifacts, requires exactly one DMG, verifies the
+filename, recomputes the DMG hash, extracts the app with `undmg`, verifies the
+app version, updates `package.nix`, tags the package metadata commit, and
+creates the draft GitHub Release with the approved DMG attached.
+
 Build local DMG artifacts with `make dmg`. By default this creates a Debug
 development DMG under `build/dist/`. Use `CONFIGURATION=Release` for release
 packaging. The DMG is the intended first binary distribution container, while
@@ -36,11 +58,11 @@ filesystem so `pkgs.undmg` can extract them in Nix-based validation. Do not
 switch the release image back to an implicit filesystem without revalidating
 `undmg` compatibility.
 
-The release workflow runs on `macos-26` so GitHub Actions uses Xcode 26 for
-asset catalog compilation. Keep release packaging on Xcode 26 or newer unless
-the app icon output is revalidated; the app icon source is an `AppIcon.icon`
-document and older Xcode defaults can produce a different `AppIcon.icns` even
-when the icon image assets themselves are unchanged.
+Release packaging workflows run on `macos-26` so GitHub Actions uses Xcode 26
+for asset catalog compilation. Keep release packaging on Xcode 26 or newer
+unless the app icon output is revalidated; the app icon source is an
+`AppIcon.icon` document and older Xcode defaults can produce a different
+`AppIcon.icns` even when the icon image assets themselves are unchanged.
 
 For Developer ID packaging, pass Xcode signing overrides such as
 `CODE_SIGN_STYLE`, `CODE_SIGN_IDENTITY`, and `DEVELOPMENT_TEAM`; pass

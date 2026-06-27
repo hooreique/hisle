@@ -88,6 +88,11 @@ with `undmg` and installs `hisle.app` under `$out/Applications/`. Do not enable
 fixup phases that rewrite the bundled app or helper binaries, because that
 would invalidate release code signatures.
 
+`package.nix` is updated during release promotion by the `Package Release`
+workflow, not during DMG candidate builds. Release promotion should update only
+the pinned release `version` and DMG file `hash` after verifying the approved
+candidate artifact.
+
 ## Versions
 
 Keep app and core versions independent. The app distribution version lives in

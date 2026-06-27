@@ -1,0 +1,249 @@
+name: Package Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version from the Build DMG summary, e.g. 0.1.6"
+        required: true
+        type: string
+      dmg_sha:
+        description: "DMG file Nix SRI SHA-256, e.g. sha256-..."
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  contents: write
+
+env:
+  GH_TOKEN: ${{ github.token }}
+  RELEASE_VERSION: ${{ inputs.version }}
+  EXPECTED_DMG_SHA: ${{ inputs.dmg_sha }}
+
+jobs:
+  package-release:
+    name: Package approved DMG
+    runs-on: macos-26
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Install Nix
+        uses: DeterminateSystems/determinate-nix-action@v3.21.2
+
+      - name: Find latest successful Build DMG run
+        id: build_run
+        run: |
+          set -euo pipefail
+
+          build_run_id="$(
+            gh api \
+              -H "Accept: application/vnd.github+json" \
+              "/repos/$GITHUB_REPOSITORY/actions/workflows/build.yaml/runs?branch=main&status=success&per_page=1" \
+              --jq '.workflow_runs[0].id // empty'
+          )"
+
+          if [[ -z "$build_run_id" ]]; then
+            echo "::error::No successful build.yaml run found"
+            exit 1
+          fi
+
+          build_run_url="$(
+            gh api \
+              -H "Accept: application/vnd.github+json" \
+              "/repos/$GITHUB_REPOSITORY/actions/runs/$build_run_id" \
+              --jq '.html_url'
+          )"
+
+          {
+            echo "BUILD_RUN_ID=$build_run_id"
+            echo "BUILD_RUN_URL=$build_run_url"
+          } >> "$GITHUB_ENV"
+
+          {
+            echo "build_run_id=$build_run_id"
+            echo "build_run_url=$build_run_url"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Validate Package inputs
+        run: |
+          set -euo pipefail
+
+          if [[ ! "$RELEASE_VERSION" =~ ^[0-9]+(\.[0-9]+){0,2}$ ]]; then
+            echo "::error::Invalid release version input: $RELEASE_VERSION"
+            exit 1
+          fi
+
+          if [[ ! "$EXPECTED_DMG_SHA" =~ ^sha256-[A-Za-z0-9+/]+={0,2}$ ]]; then
+            echo "::error::Invalid DMG hash input. Expected Nix SRI form: sha256-..."
+            exit 1
+          fi
+
+      - name: Download release candidate artifacts
+        run: |
+          set -euo pipefail
+
+          rm -rf release-candidate
+          mkdir -p release-candidate
+          gh run download "$BUILD_RUN_ID" --dir release-candidate
+
+      - name: Verify release candidate DMG
+        id: candidate
+        run: |
+          set -euo pipefail
+
+          dmg_count="$(find release-candidate -type f -name '*.dmg' | wc -l | tr -d ' ')"
+          if [[ "$dmg_count" != "1" ]]; then
+            echo "::error::Expected exactly one DMG in artifact, found $dmg_count"
+            find release-candidate -type f
+            exit 1
+          fi
+
+          dmg_path="$(find release-candidate -type f -name '*.dmg' -print -quit)"
+          dmg_name="$(basename "$dmg_path")"
+
+          expected_dmg_name="hisle-$RELEASE_VERSION.dmg"
+          if [[ "$dmg_name" != "$expected_dmg_name" ]]; then
+            echo "::error::Unexpected DMG filename: $dmg_name; expected $expected_dmg_name"
+            exit 1
+          fi
+
+          dmg_nix_hash="$(nix hash file --type sha256 --sri "$dmg_path")"
+
+          if [[ "$dmg_nix_hash" != "$EXPECTED_DMG_SHA" ]]; then
+            echo "::error::DMG hash mismatch"
+            echo "::error::Expected $EXPECTED_DMG_SHA"
+            echo "::error::Actual   $dmg_nix_hash"
+            exit 1
+          fi
+
+          extract_dir="$(mktemp -d)"
+          trap 'rm -rf "$extract_dir"' EXIT
+
+          nix develop --command -- sh -c 'cd "$1" && undmg "$2"' sh "$extract_dir" "$PWD/$dmg_path"
+
+          app_info_plist="$extract_dir/hisle.app/Contents/Info.plist"
+          if [[ ! -f "$app_info_plist" ]]; then
+            echo "::error::undmg did not extract hisle.app/Contents/Info.plist from $dmg_path"
+            exit 1
+          fi
+
+          app_version="$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$app_info_plist")"
+
+          if [[ "$app_version" != "$RELEASE_VERSION" ]]; then
+            echo "::error::DMG version mismatch"
+            echo "::error::Expected $RELEASE_VERSION"
+            echo "::error::Actual   $app_version"
+            exit 1
+          fi
+
+          release_tag="v$RELEASE_VERSION"
+
+          {
+            echo "DMG_PATH=$dmg_path"
+            echo "DMG_NAME=$dmg_name"
+            echo "RELEASE_TAG=$release_tag"
+          } >> "$GITHUB_ENV"
+
+          {
+            echo "dmg_path=$dmg_path"
+            echo "dmg_name=$dmg_name"
+            echo "release_tag=$release_tag"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Check release destination
+        run: |
+          set -euo pipefail
+
+          if git ls-remote --exit-code --tags origin "refs/tags/$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "::error::Tag already exists: $RELEASE_TAG"
+            exit 1
+          fi
+
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "::error::Release already exists: $RELEASE_TAG"
+            exit 1
+          fi
+
+      - name: Update package metadata
+        run: |
+          set -euo pipefail
+
+          version_count="$(perl -0ne 'print scalar(() = /version = "[^"]+";/g)' package.nix)"
+          hash_count="$(perl -0ne 'print scalar(() = /hash = "sha256-[A-Za-z0-9+\/]+={0,2}";/g)' package.nix)"
+
+          if [[ "$version_count" != "1" ]]; then
+            echo "::error::Expected exactly one package.nix version field, found $version_count"
+            exit 1
+          fi
+
+          if [[ "$hash_count" != "1" ]]; then
+            echo "::error::Expected exactly one package.nix hash field, found $hash_count"
+            exit 1
+          fi
+
+          perl -0pi -e 's/version = "[^"]+";/version = "$ENV{RELEASE_VERSION}";/g; s/hash = "sha256-[A-Za-z0-9+\/]+={0,2}";/hash = "$ENV{EXPECTED_DMG_SHA}";/g' package.nix
+
+          packaged_version="$(nix eval .#packages.aarch64-darwin.hisle.version --raw)"
+          if [[ "$packaged_version" != "$RELEASE_VERSION" ]]; then
+            echo "::error::package.nix version mismatch after update"
+            echo "::error::Expected $RELEASE_VERSION"
+            echo "::error::Actual   $packaged_version"
+            exit 1
+          fi
+
+          git diff -- package.nix
+
+      - name: Commit package metadata
+        run: |
+          set -euo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.nix
+
+          if git diff --cached --quiet; then
+            echo "::notice::package.nix already matches the approved release metadata"
+          else
+            git commit -m "Package hisle $RELEASE_TAG"
+            git push origin HEAD:main
+          fi
+
+      - name: Tag package commit
+        run: |
+          set -euo pipefail
+
+          git tag "$RELEASE_TAG" HEAD
+          git push origin "refs/tags/$RELEASE_TAG"
+
+      - name: Create draft GitHub Release
+        run: |
+          set -euo pipefail
+
+          gh release create "$RELEASE_TAG" "$DMG_PATH" \
+            --draft \
+            --verify-tag \
+            --title "$RELEASE_TAG" \
+            --notes ""
+
+      - name: Summarize packaged release
+        run: |
+          set -euo pipefail
+
+          {
+            echo "## Packaged release"
+            echo ""
+            echo "| Field | Value |"
+            echo "| --- | --- |"
+            echo "| Build run | $BUILD_RUN_URL |"
+            echo "| Version | \`$RELEASE_VERSION\` |"
+            echo "| DMG SHA | \`$EXPECTED_DMG_SHA\` |"
+            echo "| DMG file | \`$DMG_NAME\` |"
+            echo "| Release tag | \`$RELEASE_TAG\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
