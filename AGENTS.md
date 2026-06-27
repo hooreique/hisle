@@ -40,6 +40,7 @@
 - `hisle/AppIcon.icon/`, `hisle/Assets.xcassets/`, `hisle/Resources/`, and
   `tools/icons/` contain app and input-method icon sources and outputs.
 - `hisle/Info.plist` contains input method metadata consumed by macOS.
+- `flake.nix` and `package.nix` contain Nix shells and the release DMG package.
 - `tools/` contains local Nushell build, install, package, test, and icon
   helpers.
 - `.github/workflows/release.yaml` contains the manual release workflow.
@@ -69,8 +70,8 @@
 - App icon or input method icon assets: read `docs/icon.md`.
 - DMG packaging, signing, notarization, stapling, or release workflow: read
   `docs/packaging.md`.
-- Nix shells, Xcode build boundaries, `Makefile`, helper scripts, or version
-  ownership: read `docs/toolchains.md`.
+- Nix shells, Nix packages, Xcode build boundaries, `Makefile`, helper
+  scripts, or version ownership: read `docs/toolchains.md`.
 
 ## Best Practices
 

@@ -1,8 +1,9 @@
 # Toolchains
 
-This document covers Nix shells, Xcode boundaries, local build products, helper
-scripts, and version ownership. Read it before changing `flake.nix`, `Makefile`,
-build scripts in `tools/`, Xcode build settings, or version declarations.
+This document covers Nix shells and packages, Xcode boundaries, local build
+products, helper scripts, and version ownership. Read it before changing
+`flake.nix`, `package.nix`, `Makefile`, build scripts in `tools/`, Xcode build
+settings, or version declarations.
 
 ## Commands
 
@@ -34,6 +35,12 @@ Xcode-oriented dev shell check:
 
 ```sh
 nix develop .#xcode-work --command -- xcodebuild -version
+```
+
+Build the packaged release app from the pinned DMG:
+
+```sh
+nix build .#hisle
 ```
 
 ## Make Targets
@@ -72,6 +79,14 @@ Xcode-oriented Make targets call `/usr/bin/xcodebuild` through an environment
 scrubber that clears Nix compiler, linker, and SDK variables such as `CC`,
 `CXX`, `LD`, and `SDKROOT`. Preserve that boundary when changing Xcode build
 helpers so Xcode does not inherit Nix toolchain settings.
+
+## Nix Package
+
+`package.nix` packages the signed release DMG exposed as
+`packages.aarch64-darwin.hisle`. It extracts the pinned GitHub release asset
+with `undmg` and installs `hisle.app` under `$out/Applications/`. Do not enable
+fixup phases that rewrite the bundled app or helper binaries, because that
+would invalidate release code signatures.
 
 ## Versions
 

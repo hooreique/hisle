@@ -26,6 +26,10 @@ xcuserdata/
 # Node dependencies
 node_modules
 
+# Nix
+result
+result-*
+
 # Local environment overrides
 local
 .envrc.local
