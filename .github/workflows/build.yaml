@@ -171,14 +171,10 @@ jobs:
           set -euo pipefail
 
           {
-            echo "## Release candidate"
-            echo ""
-            echo "| Field | Value |"
-            echo "| --- | --- |"
-            echo "| Version | \`$APP_VERSION\` |"
-            echo "| DMG SHA | \`$DMG_NIX_HASH\` |"
-            echo "| DMG path | \`$DMG_PATH\` |"
-            echo "| Tag to package | \`$RELEASE_TAG\` |"
+            echo "\`\`\`nix"
+            printf '{version="%s";dmgHash="%s";}' "$APP_VERSION" "$DMG_NIX_HASH"
+            echo
+            echo "\`\`\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Delete temporary keychain

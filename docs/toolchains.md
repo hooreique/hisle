@@ -83,15 +83,17 @@ helpers so Xcode does not inherit Nix toolchain settings.
 ## Nix Package
 
 `package.nix` packages the signed release DMG exposed as
-`packages.aarch64-darwin.hisle`. It extracts the pinned GitHub release asset
-with `undmg` and installs `hisle.app` under `$out/Applications/`. Do not enable
+`packages.aarch64-darwin.hisle`. It imports the pinned release version and DMG
+file hash from `build-info.nix`, extracts the matching GitHub release asset with
+`undmg`, and installs `hisle.app` under `$out/Applications/`. Do not enable
 fixup phases that rewrite the bundled app or helper binaries, because that
 would invalidate release code signatures.
 
-`package.nix` is updated during release promotion by the `Package Release`
+`build-info.nix` is updated during release promotion by the `Package Release`
 workflow, not during DMG candidate builds. Release promotion should update only
-the pinned release `version` and DMG file `hash` after verifying the approved
-candidate artifact.
+that file's `version` and `dmgHash` fields after verifying the approved
+candidate artifact. `package.nix` should not be edited for ordinary release
+metadata bumps.
 
 ## Versions
 

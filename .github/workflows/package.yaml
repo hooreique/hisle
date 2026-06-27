@@ -3,12 +3,7 @@ name: Package Release
 on:
   workflow_dispatch:
     inputs:
-      version:
-        description: "Release version from the Build DMG summary, e.g. 0.1.6"
-        required: true
-        type: string
-      dmg_sha:
-        description: "DMG file Nix SRI SHA-256, e.g. sha256-..."
+      "build-info.nix":
         required: true
         type: string
 
@@ -18,8 +13,7 @@ permissions:
 
 env:
   GH_TOKEN: ${{ github.token }}
-  RELEASE_VERSION: ${{ inputs.version }}
-  EXPECTED_DMG_SHA: ${{ inputs.dmg_sha }}
+  BUILD_INFO_NIX: ${{ inputs['build-info.nix'] }}
 
 jobs:
   package-release:
@@ -71,19 +65,28 @@ jobs:
             echo "build_run_url=$build_run_url"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Validate Package inputs
+      - name: Write build info input
         run: |
           set -euo pipefail
 
-          if [[ ! "$RELEASE_VERSION" =~ ^[0-9]+(\.[0-9]+){0,2}$ ]]; then
-            echo "::error::Invalid release version input: $RELEASE_VERSION"
-            exit 1
-          fi
+          {
+            echo "# Do not modify"
+            printf '%s\n' "$BUILD_INFO_NIX"
+          } > build-info.nix
 
-          if [[ ! "$EXPECTED_DMG_SHA" =~ ^sha256-[A-Za-z0-9+/]+={0,2}$ ]]; then
-            echo "::error::Invalid DMG hash input. Expected Nix SRI form: sha256-..."
-            exit 1
-          fi
+          git diff -- build-info.nix
+
+      - name: Read package inputs
+        run: |
+          set -euo pipefail
+
+          release_version="$(nix eval --raw --file build-info.nix version)"
+          expected_dmg_sha="$(nix eval --raw --file build-info.nix dmgHash)"
+
+          {
+            echo "RELEASE_VERSION=$release_version"
+            echo "EXPECTED_DMG_SHA=$expected_dmg_sha"
+          } >> "$GITHUB_ENV"
 
       - name: Download release candidate artifacts
         run: |
@@ -171,45 +174,38 @@ jobs:
             exit 1
           fi
 
-      - name: Update package metadata
+      - name: Verify package metadata
         run: |
           set -euo pipefail
 
-          version_count="$(perl -0ne 'print scalar(() = /version = "[^"]+";/g)' package.nix)"
-          hash_count="$(perl -0ne 'print scalar(() = /hash = "sha256-[A-Za-z0-9+\/]+={0,2}";/g)' package.nix)"
-
-          if [[ "$version_count" != "1" ]]; then
-            echo "::error::Expected exactly one package.nix version field, found $version_count"
-            exit 1
-          fi
-
-          if [[ "$hash_count" != "1" ]]; then
-            echo "::error::Expected exactly one package.nix hash field, found $hash_count"
-            exit 1
-          fi
-
-          perl -0pi -e 's/version = "[^"]+";/version = "$ENV{RELEASE_VERSION}";/g; s/hash = "sha256-[A-Za-z0-9+\/]+={0,2}";/hash = "$ENV{EXPECTED_DMG_SHA}";/g' package.nix
-
           packaged_version="$(nix eval .#packages.aarch64-darwin.hisle.version --raw)"
           if [[ "$packaged_version" != "$RELEASE_VERSION" ]]; then
-            echo "::error::package.nix version mismatch after update"
+            echo "::error::Package version mismatch after build-info.nix input"
             echo "::error::Expected $RELEASE_VERSION"
             echo "::error::Actual   $packaged_version"
             exit 1
           fi
 
-          git diff -- package.nix
+          packaged_dmg_sha="$(nix eval .#packages.aarch64-darwin.hisle.src.outputHash --raw)"
+          if [[ "$packaged_dmg_sha" != "$EXPECTED_DMG_SHA" ]]; then
+            echo "::error::Package DMG hash mismatch after build-info.nix input"
+            echo "::error::Expected $EXPECTED_DMG_SHA"
+            echo "::error::Actual   $packaged_dmg_sha"
+            exit 1
+          fi
 
-      - name: Commit package metadata
+          git diff -- build-info.nix
+
+      - name: Commit build info
         run: |
           set -euo pipefail
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add package.nix
+          git add build-info.nix
 
           if git diff --cached --quiet; then
-            echo "::notice::package.nix already matches the approved release metadata"
+            echo "::notice::build-info.nix already matches the approved release metadata"
           else
             git commit -m "Package hisle $RELEASE_TAG"
             git push origin HEAD:main

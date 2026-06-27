@@ -41,11 +41,13 @@
   `tools/icons/` contain app and input-method icon sources and outputs.
 - `hisle/Info.plist` contains input method metadata consumed by macOS.
 - `flake.nix` and `package.nix` contain Nix shells and the release DMG package.
+- `build-info.nix` contains the approved release version and DMG hash consumed
+  by `package.nix`.
 - `tools/` contains local Nushell build, install, package, test, and icon
   helpers.
 - `.github/workflows/build.yaml` builds signed, notarized DMG candidates.
 - `.github/workflows/package.yaml` promotes an approved DMG candidate into
-  `package.nix`, a version tag, and a draft GitHub Release.
+  `build-info.nix`, a version tag, and a draft GitHub Release.
 - `bugfix/` contains per-bug investigation notes and status records.
 - `docs/` contains focused maintainer notes. Keep each topic in its owning
   document.

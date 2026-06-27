@@ -31,9 +31,16 @@ Use the manual `Build DMG` GitHub Actions workflow to create a release
 candidate. It builds, signs, notarizes, staples, validates, and uploads one DMG
 artifact. This workflow does not create a tag or GitHub Release.
 
-Inspect the candidate DMG manually before promotion. The build summary prints
-the app version and the final stapled DMG's Nix SRI SHA-256 hash, which are the
-inputs for the manual `Package Release` workflow. The same hash can be
+Inspect the candidate DMG manually before promotion. The build summary prints a
+single-line Nix attr set containing the app version and the final stapled DMG's
+Nix SRI SHA-256 hash:
+
+```nix
+{version="0.1.6";dmgHash="sha256-...";}
+```
+
+Paste that attr set into the `build-info.nix` input for the manual `Package
+Release` workflow. The same hash can be
 recomputed from a downloaded candidate with:
 
 ```sh
@@ -41,11 +48,14 @@ nix hash file --type sha256 --sri hisle-VERSION.dmg
 ```
 
 Promote the latest successful `Build DMG` run on `main` by running
-`Package Release` with the approved version and DMG hash. The package workflow
-downloads that build's artifacts, requires exactly one DMG, verifies the
-filename, recomputes the DMG hash, extracts the app with `undmg`, verifies the
-app version, updates `package.nix`, tags the package metadata commit, and
-creates the draft GitHub Release with the approved DMG attached.
+`Package Release` with the approved `build-info.nix` attr set. The package workflow
+writes that input to `build-info.nix` with the standard generated-file comment,
+evaluates the file with Nix to read the approved version and hash, downloads
+that build's artifacts, requires exactly one DMG, verifies the filename,
+recomputes the DMG hash, extracts the app with `undmg`, verifies the app
+version, tags the package metadata commit, and creates the draft GitHub Release
+with the approved DMG attached. `package.nix` imports `build-info.nix` at
+evaluation time, so normal release promotion does not rewrite `package.nix`.
 
 Build local DMG artifacts with `make dmg`. By default this creates a Debug
 development DMG under `build/dist/`. Use `CONFIGURATION=Release` for release

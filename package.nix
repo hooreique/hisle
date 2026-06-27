@@ -5,15 +5,18 @@
   undmg,
 }:
 
+let
+  release = import ./build-info.nix;
+in
 stdenvNoCC.mkDerivation (finalAttrs: {
   pname = "hisle";
-  version = "0.1.6";
+  version = release.version;
 
   src = fetchurl {
     url =
       "https://github.com/hooreique/hisle/releases/download/v${finalAttrs.version}/"
       + "hisle-${finalAttrs.version}.dmg";
-    hash = "sha256-UUY7qBoyEFPNZw/d+XZ6VO2k6yMX04qUAaNRc3PxHhA=";
+    hash = release.dmgHash;
   };
 
   nativeBuildInputs = [
