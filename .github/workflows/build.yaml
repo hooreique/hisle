@@ -20,7 +20,7 @@ jobs:
         uses: DeterminateSystems/determinate-nix-action@v3.21.2
 
       - name: Check toolchain
-        run: nix develop .#xcode-work --command -- make check-toolchain
+        run: nix develop --command -- make check-toolchain
 
       - name: Import Developer ID certificate
         env:
@@ -45,7 +45,7 @@ jobs:
           security find-identity -p codesigning -v
 
       - name: Run core spec check
-        run: nix develop --command -- make core-spec-check
+        run: nix develop .#core --command -- make core-spec-check
 
       - name: Build signed Release DMG
         env:
@@ -55,7 +55,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          nix develop .#xcode-work --command -- make dmg \
+          nix develop --command -- make dmg \
             CONFIGURATION=Release \
             CODE_SIGN_STYLE=Manual \
             DEVELOPMENT_TEAM="$DEVELOPMENT_TEAM" \

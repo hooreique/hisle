@@ -89,9 +89,9 @@ Escape acts as a flush and Roman-mode selection boundary, not as cancel.
 
 ## Shortcut Behavior
 
-Command/control shortcuts are not mode-selection gestures. If a Hangul
-composition is active, flush it first and then forward the shortcut to the host
-app according to the existing shortcut policy.
+Modifier shortcuts are not mode-selection gestures. If a Hangul composition is
+active, flush it first and then forward the shortcut to the host app according
+to the existing shortcut policy.
 
 In Hangul mode, shortcut forwarding follows the `underlying roman layout`
 contract defined by Cole Sebeol. Printable text behavior in Roman mode is

@@ -44,7 +44,7 @@ legacy TIS callers.
 - Before doing icon work, first decide which icon is changing.
 - Keep app-icon and input-method-icon sources, outputs, and metadata separate
   in both documentation and implementation.
-- Icon rendering uses the `icon-work` Nix shell with `resvg` and ImageMagick.
+- Icon rendering uses the `icon` Nix shell with `resvg` and ImageMagick.
 - `make icons` renders both the input method icon resources and the app icon
   fallback PNGs.
 - Build release app bundles with Xcode 26 or newer so `AppIcon.icon`
@@ -61,9 +61,9 @@ legacy TIS callers.
 ## Quick Check
 
 ```sh
-make icons
-nix develop .#icon-work --command -- nu tools/render_icons.nu
-nix develop .#xcode-work --command -- make build
+nix develop .#icon --command -- make icons
+nix develop .#icon --command -- nu tools/render_icons.nu
+nix develop --command -- make build
 ```
 
 After the build, the `.app` bundle should contain these files.

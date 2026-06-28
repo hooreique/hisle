@@ -70,11 +70,13 @@ running binary is the one you intended to test. Inspect the
 `controller runtime` log entry, or the Chrome IME reproduction's
 `build/chrome-ime/<run-id>/runtime-identity.log`, and check that
 `buildProfile=` is the expected `debug` or `release`, `build=` matches the
-current `CURRENT_PROJECT_VERSION`, and `bundle=` points to the installed app
-under `~/Library/Input Methods/hisle.app`. All builds include this identity on
+current `CURRENT_PROJECT_VERSION`, `coreVersion=` matches `HisleCore.version`,
+and `bundle=` points to the installed app under
+`~/Library/Input Methods/hisle.app`. All builds include this identity on
 controller initialization and activation lifecycle logs.
 
-Run `make version-check` whenever version declarations are changed.
+Run `nix develop --command -- make version-check` whenever version declarations
+are changed.
 
 ## Closing A Bug
 

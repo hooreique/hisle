@@ -10,13 +10,13 @@ must be verified with real GUI focus.
 Preferred command:
 
 ```sh
-make gui-smoke-test
+nix develop --command -- make gui-smoke-test
 ```
 
-This target runs the core contract/spec check, builds and installs the debug
-input method, opens a temporary file in Sublime Text, selects the `hisle` input
-source, streams `hisle` logs, sends the GUI key sequence, saves the temporary
-file through Sublime Text, and verifies the saved file content automatically.
+This target builds and installs the debug input method, opens a temporary file
+in Sublime Text, selects the `hisle` input source, streams `hisle` logs, sends
+the GUI key sequence, saves the temporary file through Sublime Text, and
+verifies the saved file content automatically.
 
 The command exiting with status 0 means the scripted setup, key sequence,
 Colemak-underlying Command+S save path, and saved file content verification all
@@ -29,6 +29,9 @@ To run only the GUI driver after a debug install:
 ```sh
 nix develop --command -- nu tools/gui_smoke_test.nu
 ```
+
+The GUI driver imports Cocoa and ApplicationServices, so the script compiles it
+with Xcode's `xcrun swiftc`, not the pinned Nix Swift used by `hisle-core`.
 
 Requirements:
 
@@ -89,8 +92,9 @@ Known non-issues:
 
 - The first run after a debug install may occasionally fail once while waiting
   for the final input-source round trip to become active. If the setup looked
-  correct and focus was not changed manually, rerun `make gui-smoke-test` once
-  before treating it as a regression.
+  correct and focus was not changed manually, rerun
+  `nix develop --command -- make gui-smoke-test` once before treating it as a
+  regression.
 - Xcode may print CoreSimulator version warnings while building this macOS input
   method target. Treat them as noise unless the build fails.
 - Xcode may print AppIntents metadata extraction warnings such as skipped
@@ -107,14 +111,18 @@ driver.
 Preferred command:
 
 ```sh
-make chrome-ime-repro
+nix develop .#browser --command -- make chrome-ime-repro
 ```
 
 To run only the repro after a debug install:
 
 ```sh
-nix develop .#browser-work --command -- nu tools/chrome_ime_repro.nu
+nix develop .#browser --command -- nu tools/chrome_ime_repro.nu
 ```
+
+The Swift HID driver imports macOS frameworks, so the script compiles it with
+Xcode's `xcrun swiftc`. Keep the pinned Nix Swift reserved for pure
+`hisle-core` commands in the `core` shell.
 
 Useful environment options:
 
@@ -192,7 +200,7 @@ env \
   HISLE_CHROME_INITIAL_TEXT='가나다라마바사' \
   HISLE_CHROME_INITIAL_SELECTION='0:7' \
   EXPECTED_VALUE='안녕하세요' \
-  nix develop .#browser-work --command -- nu tools/chrome_ime_repro.nu
+  nix develop .#browser --command -- nu tools/chrome_ime_repro.nu
 ```
 
 Then run the stale-selection model. It uses the same contenteditable surface,
@@ -204,7 +212,7 @@ only the last unit, `요`:
 env \
   HISLE_CHROME_SCENARIO=stale-selection-annyeonghaseyo \
   RUN_ID=stale-selection-annyeonghaseyo \
-  nix develop .#browser-work --command -- nu tools/chrome_ime_repro.nu
+  nix develop .#browser --command -- nu tools/chrome_ime_repro.nu
 ```
 
 This scenario is a focused fixture for stale host/client range behavior; inspect

@@ -258,7 +258,8 @@ func selectInputSource(id: String) throws {
 
     guard let source = inputSources(matching: filter).first else {
         throw GuiTestFailure.message(
-            "Input source \(id) was not found. Run make install-debug and enable hisle " +
+            "Input source \(id) was not found. Run " +
+                "`nix develop --command -- make install-debug` and enable hisle " +
                 "in System Settings > Keyboard > Input Sources."
         )
     }
@@ -573,7 +574,7 @@ func runHisleCLI(arguments: [String] = []) throws -> String {
     guard FileManager.default.isExecutableFile(atPath: hisleCLIURL.path) else {
         throw GuiTestFailure.message(
             "Bundled hisle CLI was not found or is not executable at \(hisleCLIURL.path). " +
-                "Run make install-debug, then rerun the GUI test."
+                "Run `nix develop --command -- make install-debug`, then rerun the GUI test."
         )
     }
 

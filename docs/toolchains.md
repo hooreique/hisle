@@ -10,31 +10,35 @@ settings, or version declarations.
 Show command summary:
 
 ```sh
-make help
+nix develop --command -- make help
 ```
 
 Print active Xcode toolchain information:
 
 ```sh
-nix develop .#xcode-work --command -- make check-toolchain
+nix develop --command -- make check-toolchain
 ```
+
+This also prints `HISLE_DEV_SHELL`, the Xcode `swiftc` selected by `xcrun`,
+and the first `swiftc` on `PATH`. In the app and browser shells, `swiftc` must
+not resolve to the Nix Swift compiler.
 
 Remove local build products:
 
 ```sh
-make clean
+nix develop --command -- make clean
 ```
 
 Version ownership check:
 
 ```sh
-make version-check
+nix develop --command -- make version-check
 ```
 
 Lint Swift sources with SwiftLint:
 
 ```sh
-make swiftlint
+nix develop --command -- make swiftlint
 ```
 
 SwiftLint uses `.swiftlint.yml` and excludes generated SwiftPM build output
@@ -43,7 +47,7 @@ under `hisle-core/.build`.
 Xcode-oriented dev shell check:
 
 ```sh
-nix develop .#xcode-work --command -- xcodebuild -version
+nix develop --command -- xcodebuild -version
 ```
 
 Build the packaged release app from the pinned DMG:
@@ -56,29 +60,63 @@ nix build .#hisle
 
 Prefer the `make` targets for local build, install, uninstall, cleaning,
 packaging, testing, and icon rendering. They are the stable developer entry
-points.
+points, but they must be run from the owning Nix dev shell. The Makefile does
+not call `nix develop` itself, and targets that require a specific shell fail
+early when `HISLE_DEV_SHELL` does not match.
 
-Keep helper scripts in Nushell and run them through the Nix dev shell.
+Use these shell routes:
+
+| Area | Shell | Example |
+| --- | --- | --- |
+| `hisle` app, Xcode builds, install, packaging, GUI smoke tests | `default` | `nix develop --command -- make build` |
+| `hisle-core` pure SwiftPM work | `core` | `nix develop .#core --command -- make core-spec-check` |
+| Chrome/Playwright IME diagnostics | `browser` | `nix develop .#browser --command -- make chrome-ime-repro` |
+| Icon rendering | `icon` | `nix develop .#icon --command -- make icons` |
+
+For interactive work, enter the owning shell once, such as `nix develop` or
+`nix develop .#core`, then run bare `make` targets inside that shell. The
+examples above use `nix develop ... --command -- make ...` for one-shot
+commands and automation.
+
+Keep helper scripts in Nushell and run them through the owning Nix dev shell.
+Do not add cross-shell Make dependencies; run checks that belong to different
+shells as separate commands.
 
 Local app builds are written under `build/` with `SYMROOT`, not Xcode's default
 DerivedData location.
 
 ## Nix Shells
 
-The default Nix dev shell appends `/usr/bin:/bin` after the Nix paths so SwiftPM
-can find macOS's `codesign` during its debug executable signing step while still
-resolving `swift` from Nix first. It also sets
+Each dev shell appends `/usr/bin:/bin` after the Nix paths so macOS system
+tools remain available while still resolving Nix-provided tools first when
+present. Each shell also sets
 `NIX_CC_WRAPPER_SUPPRESS_TARGET_WARNING=1` to suppress the Nix cc-wrapper's
-known multi-target warning without hiding Swift compiler diagnostics.
+known multi-target warning without hiding Swift compiler diagnostics, and
+`HISLE_DEV_SHELL` to its shell name.
 
-Use the `xcode-work` Nix shell for Xcode-oriented commands that should see
-`/Applications/Xcode.app/Contents/Developer` as `DEVELOPER_DIR`.
+The default shell is the app/Xcode shell. It includes Nushell, SwiftLint, and
+`undmg`, and sets `/Applications/Xcode.app/Contents/Developer` as
+`DEVELOPER_DIR` when that path exists. It intentionally does not include Nix
+Swift or SwiftPM; app builds and GUI helper drivers use Xcode's Swift toolchain
+through `xcodebuild` or `xcrun swiftc`. It also unsets Nix compiler and SDK
+variables so Xcode tools do not accidentally see the Nix apple-sdk. Run
+Xcode-oriented Make targets from this shell. In automation, prefer
+`nix develop --command -- make build` over host-shell `make build` or one-off
+`DEVELOPER_DIR=... make build` invocations. If a host-shell `make build` fails
+because `xcode-select` points at Command Line Tools, rerun the command through
+`nix develop` before reporting a build issue.
 
-Run Xcode-oriented Make targets from the `xcode-work` shell. In automation,
-prefer `nix develop .#xcode-work --command -- make build` over host-shell
-`make build` or one-off `DEVELOPER_DIR=... make build` invocations. If a
-host-shell `make build` fails because `xcode-select` points at Command Line
-Tools, rerun the command through `xcode-work` before reporting a build issue.
+The `core` shell is for pure `hisle-core` SwiftPM work. It includes Nushell,
+Swift, and SwiftPM, and does not set `DEVELOPER_DIR`.
+
+The `browser` shell is for Chrome IME diagnostics. It includes the default
+app/Xcode tools plus Node.js/npm so `tools/chrome_ime_repro.nu` can install and
+run the Playwright observer. It also intentionally avoids Nix Swift because the
+Chrome HID driver imports macOS frameworks and is compiled with Xcode's
+`xcrun swiftc`.
+
+The `icon` shell is for icon rendering. It includes Nushell, `resvg`, and
+ImageMagick.
 
 The debug install helper sets `DEVELOPER_DIR` to
 `/Applications/Xcode.app/Contents/Developer` when that path exists. Override
@@ -134,7 +172,8 @@ identity marker for installed debug app binaries. Do not bump
 `MARKETING_VERSION` for each investigation build. See `docs/bugfixes.md` for
 the bug-fix workflow.
 
-Use `make version-check` after version ownership changes.
+Use `nix develop --command -- make version-check` after version ownership
+changes.
 
 ## References
 

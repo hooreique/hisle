@@ -115,13 +115,13 @@ selection during `compositionend`.
 1. Install the debug input method.
 
 ```sh
-make install-debug
+nix develop --command -- make install-debug
 ```
 
 2. Run the ordinary GUI smoke test.
 
 ```sh
-make gui-smoke-test
+nix develop --command -- make gui-smoke-test
 ```
 
 3. Run the contenteditable selected-range control.
@@ -134,7 +134,7 @@ env \
   HISLE_CHROME_INITIAL_SELECTION='0:7' \
   EXPECTED_VALUE='안녕하세요' \
   RUN_ID=fix-014-selected-range-control \
-  nix develop .#browser-work --command -- nu tools/chrome_ime_repro.nu
+  nix develop .#browser --command -- nu tools/chrome_ime_repro.nu
 ```
 
 4. Run the stale selected-range scenario with the fixed expected value.
@@ -143,7 +143,7 @@ env \
 env \
   HISLE_CHROME_SCENARIO=stale-selection-annyeonghaseyo \
   RUN_ID=stale-selection-annyeonghaseyo-fixed \
-  nix develop .#browser-work --command -- nu tools/chrome_ime_repro.nu
+  nix develop .#browser --command -- nu tools/chrome_ime_repro.nu
 ```
 
 5. Inspect `runtime-identity.log` and `ime.log` for the fixed run. The runtime

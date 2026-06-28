@@ -10,7 +10,7 @@
 
 Fastest: download the `.dmg` from
 <https://github.com/hooreique/hisle/releases>, open it, and read the
-`install.txt` inside.
+`Install.txt` inside.
 
 Short version:
 
@@ -71,7 +71,7 @@ Disabling `programs.hisle.enable` removes the copied
 Use the Make target instead of launching the input method from Xcode:
 
 ```sh
-nix develop .#xcode-work --command -- make install-debug
+nix develop --command -- make install-debug
 ```
 
 Then add and select `hisle` in System Settings > Keyboard > Input Sources.
@@ -122,12 +122,13 @@ To inspect `hisle` activity at any time, stream its unified log:
 ```
 
 When you switch to the `hisle` input source, the stream prints a
-`controller runtime` notice with the build profile and app version.
+`controller runtime` notice with the build profile, app version, core version,
+and build number.
 
 To remove from a source checkout:
 
 ```sh
-make uninstall
+nix develop --command -- make uninstall
 ```
 
 Manual removal is just removing the installed bundle:

@@ -12,45 +12,93 @@ CODE_SIGN_STYLE ?=
 CODE_SIGN_IDENTITY ?=
 DEVELOPMENT_TEAM ?=
 OTHER_CODE_SIGN_FLAGS ?=
-NU := nix develop --command -- nu
-ICON_NU := nix develop .\#icon-work --command -- nu
-BROWSER_NU := nix develop .\#browser-work --command -- nu
-SWIFT := nix develop --ignore-environment --command -- swift
-SWIFTLINT := nix develop .\#xcode-work --command -- swiftlint
+NU ?= nu
+SWIFT ?= swift
+SWIFTLINT ?= swiftlint
 XCODEBUILD_ENV := env -u CC -u CXX -u LD -u SDKROOT -u NIX_CC -u NIX_CFLAGS_COMPILE -u NIX_CFLAGS_LINK -u NIX_LDFLAGS
 XCODEBUILD := $(XCODEBUILD_ENV) /usr/bin/xcodebuild
 
-.PHONY: all help build dmg install-debug uninstall clean icons check-toolchain version-check swiftlint core-spec-check gui-smoke-test chrome-ime-repro
+.PHONY: all help require-nix-shell require-app-shell require-default-shell require-core-shell require-browser-shell require-icon-shell build dmg install-debug uninstall clean icons check-toolchain version-check swiftlint core-spec-check gui-smoke-test chrome-ime-repro
 
 all: help
 
 help:
-	@echo 'Available commands:'
-	@echo '    build         -- build the macOS input method app'
-	@echo '    dmg           -- build and package a local DMG artifact'
-	@echo '    install-debug -- build and install into ~/Library/Input Methods'
-	@echo '    uninstall     -- remove the local debug install'
-	@echo '    clean         -- remove local build products'
-	@echo '    icons         -- render input method icon assets'
-	@echo '    check-toolchain -- print active Xcode toolchain information'
-	@echo '    version-check -- validate app/core version declaration ownership'
-	@echo '    swiftlint     -- lint Swift sources with SwiftLint'
-	@echo '    core-spec-check -- validate the Cole Sebeol core contract'
-	@echo '    gui-smoke-test -- run the Sublime Text GUI smoke test with hisle logs'
-	@echo '    chrome-ime-repro -- run the Chrome textarea IME reproduction tool'
+	@echo 'Available commands, run from the owning Nix dev shell:'
+	@echo '    nix develop --command -- make build'
+	@echo '    nix develop --command -- make dmg'
+	@echo '    nix develop --command -- make install-debug'
+	@echo '    nix develop --command -- make uninstall'
+	@echo '    nix develop --command -- make clean'
+	@echo '    nix develop --command -- make check-toolchain'
+	@echo '    nix develop --command -- make version-check'
+	@echo '    nix develop --command -- make swiftlint'
+	@echo '    nix develop --command -- make gui-smoke-test'
+	@echo '    nix develop .#core --command -- make core-spec-check'
+	@echo '    nix develop .#browser --command -- make chrome-ime-repro'
+	@echo '    nix develop .#icon --command -- make icons'
 
-check-toolchain:
+require-nix-shell:
+	@if [ -z "$$IN_NIX_SHELL" ]; then \
+		echo 'Run make from the owning Nix dev shell:' >&2; \
+		echo '    nix develop --command -- make <target>' >&2; \
+		echo '    nix develop .#core --command -- make core-spec-check' >&2; \
+		echo '    nix develop .#browser --command -- make chrome-ime-repro' >&2; \
+		echo '    nix develop .#icon --command -- make icons' >&2; \
+		exit 1; \
+	fi
+
+require-app-shell: require-nix-shell
+	@case "$$HISLE_DEV_SHELL" in \
+		default|browser) ;; \
+		*) echo 'Run this target from the app/browser Nix dev shell:' >&2; \
+		   echo '    nix develop --command -- make <target>' >&2; \
+		   echo '    nix develop .#browser --command -- make chrome-ime-repro' >&2; \
+		   exit 1 ;; \
+	esac
+
+require-default-shell: require-nix-shell
+	@if [ "$$HISLE_DEV_SHELL" != 'default' ]; then \
+		echo 'Run this target from the default Nix dev shell:' >&2; \
+		echo '    nix develop --command -- make <target>' >&2; \
+		exit 1; \
+	fi
+
+require-core-shell: require-nix-shell
+	@if [ "$$HISLE_DEV_SHELL" != 'core' ]; then \
+		echo 'Run this target from the core Nix dev shell:' >&2; \
+		echo '    nix develop .#core --command -- make core-spec-check' >&2; \
+		exit 1; \
+	fi
+
+require-browser-shell: require-nix-shell
+	@if [ "$$HISLE_DEV_SHELL" != 'browser' ]; then \
+		echo 'Run this target from the browser Nix dev shell:' >&2; \
+		echo '    nix develop .#browser --command -- make chrome-ime-repro' >&2; \
+		exit 1; \
+	fi
+
+require-icon-shell: require-nix-shell
+	@if [ "$$HISLE_DEV_SHELL" != 'icon' ]; then \
+		echo 'Run this target from the icon Nix dev shell:' >&2; \
+		echo '    nix develop .#icon --command -- make icons' >&2; \
+		exit 1; \
+	fi
+
+check-toolchain: require-app-shell
+	@echo "HISLE_DEV_SHELL=$${HISLE_DEV_SHELL:-<unset>}"
 	$(XCODEBUILD) -version
 	xcrun --find swiftc
+	xcrun swiftc --version
 	xcrun --sdk macosx --show-sdk-path
+	@if command -v swiftc >/dev/null; then command -v swiftc; else echo 'swiftc not found on PATH'; fi
 
-version-check:
+version-check: require-default-shell
 	$(NU) tools/check_versions.nu
 
-swiftlint:
+swiftlint: require-app-shell
 	$(SWIFTLINT) lint
 
-build:
+build: require-app-shell
 	$(XCODEBUILD) \
 		-project '$(PROJECT)' \
 		-scheme '$(SCHEME)' \
@@ -59,7 +107,7 @@ build:
 		SYMROOT='$(BUILD_DIR)' \
 		build
 
-dmg:
+dmg: require-app-shell
 	PROJECT='$(PROJECT)' \
 	SCHEME='$(SCHEME)' \
 	CONFIGURATION='$(CONFIGURATION)' \
@@ -76,10 +124,10 @@ dmg:
 	OTHER_CODE_SIGN_FLAGS='$(OTHER_CODE_SIGN_FLAGS)' \
 	$(NU) tools/package_dmg.nu
 
-core-spec-check:
+core-spec-check: require-core-shell
 	$(SWIFT) run --quiet --package-path hisle-core hisle-core-spec-check
 
-install-debug:
+install-debug: require-app-shell
 	PROJECT='$(PROJECT)' \
 	SCHEME='$(SCHEME)' \
 	CONFIGURATION='$(CONFIGURATION)' \
@@ -87,17 +135,17 @@ install-debug:
 	BUILD_DIR='$(BUILD_DIR)' \
 	$(NU) tools/install_debug.nu
 
-gui-smoke-test: core-spec-check install-debug
+gui-smoke-test: require-app-shell install-debug
 	$(NU) tools/gui_smoke_test.nu
 
-chrome-ime-repro: core-spec-check install-debug
-	$(BROWSER_NU) tools/chrome_ime_repro.nu
+chrome-ime-repro: require-browser-shell install-debug
+	$(NU) tools/chrome_ime_repro.nu
 
-uninstall:
+uninstall: require-app-shell
 	$(NU) tools/uninstall.nu
 
-icons:
-	$(ICON_NU) tools/render_icons.nu
+icons: require-icon-shell
+	$(NU) tools/render_icons.nu
 
-clean:
+clean: require-nix-shell
 	rm -rf '$(BUILD_DIR)'

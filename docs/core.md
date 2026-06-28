@@ -19,31 +19,30 @@ data, Unicode Hangul handling, or core tests.
 Preferred core contract/spec check:
 
 ```sh
-make core-spec-check
+nix develop .#core --command -- make core-spec-check
 ```
 
 Core build:
 
 ```sh
-nix develop --ignore-environment --command -- swift build --quiet --package-path hisle-core
+nix develop .#core --command -- swift build --quiet --package-path hisle-core
 ```
 
 Use the pinned Swift from `flake.nix` for Swift and SwiftPM work. Always run
-Swift commands through `nix develop --ignore-environment --command -- swift ...`;
-do not call `/usr/bin/swift` directly.
+core Swift commands through `nix develop .#core --command -- swift ...`; do not
+call `/usr/bin/swift` directly.
 
 If the pinned Swift toolchain cannot run a Swift command, report that toolchain
 limitation instead of silently falling back to `/usr/bin/swift`. With the
 current flake lock, `swift build --package-path hisle-core` works, but
 `swift test --package-path hisle-core` is blocked because nixpkgs SwiftPM
 disables the XCTest runner on macOS and this Swift does not provide the
-`Testing` module. Use `make core-spec-check` for the XCTest-free Cole Sebeol
-core contract/spec check.
+`Testing` module. Use `nix develop .#core --command -- make core-spec-check`
+for the XCTest-free Cole Sebeol core contract/spec check.
 
-Core SwiftPM checks must not depend on a host Xcode or Command Line Tools
-developer directory. In the default Nix shell, `DEVELOPER_DIR` and `SDKROOT` are
-expected to point into the Nix store Apple SDK, and `xcrun` is expected to be
-the Nix-provided `xcbuild` shim.
+Core SwiftPM checks must run from the `core` shell and must not depend on a
+host Xcode developer directory. Do not set `DEVELOPER_DIR` for core-only work
+or reroute core commands to `/usr/bin/swift`.
 
 ## References
 

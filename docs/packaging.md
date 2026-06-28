@@ -10,7 +10,7 @@ these tools.
 Build and package a local DMG artifact:
 
 ```sh
-nix develop .#xcode-work --command -- make dmg
+nix develop --command -- make dmg
 ```
 
 Direct DMG package script:
@@ -57,11 +57,11 @@ version, tags the package metadata commit, and creates the draft GitHub Release
 with the approved DMG attached. `package.nix` imports `build-info.nix` at
 evaluation time, so normal release promotion does not rewrite `package.nix`.
 
-Build local DMG artifacts with `make dmg`. By default this creates a Debug
-development DMG under `build/dist/`. Use `CONFIGURATION=Release` for release
-packaging. The DMG is the intended first binary distribution container, while
-notarization and stapling remain release-only steps that require Developer ID
-credentials.
+Build local DMG artifacts with `nix develop --command -- make dmg`. By default
+this creates a Debug development DMG under `build/dist/`. Use
+`CONFIGURATION=Release` for release packaging. The DMG is the intended first
+binary distribution container, while notarization and stapling remain
+release-only steps that require Developer ID credentials.
 
 Release DMGs are intentionally compressed UDZO images with an HFS+ internal
 filesystem so `pkgs.undmg` can extract them in Nix-based validation. Do not

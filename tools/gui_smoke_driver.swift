@@ -31,7 +31,8 @@ private func requireSublimeTextInstalled() throws {
     guard let url = installedSublimeApplicationURL() else {
         throw GuiTestFailure.message(
             "\(sublimeAppName) is required for the GUI smoke test but was not found. " +
-            "Install it from \(sublimeDownloadURL), then rerun make gui-smoke-test."
+            "Install it from \(sublimeDownloadURL), then rerun " +
+            "`nix develop --command -- make gui-smoke-test`."
         )
     }
 
@@ -48,7 +49,8 @@ private func launchSublime(with fileURL: URL) throws {
     guard process.terminationStatus == 0 else {
         throw GuiTestFailure.message(
             "Could not open \(sublimeAppName). Confirm it is installed from " +
-                "\(sublimeDownloadURL), then rerun make gui-smoke-test."
+                "\(sublimeDownloadURL), then rerun " +
+                "`nix develop --command -- make gui-smoke-test`."
         )
     }
 }
@@ -122,7 +124,7 @@ private func verifySavedFileContents(_ expected: String, stage: String) throws {
 
 private func runSmokeTest() throws {
     try requireSublimeTextInstalled()
-    try requireAccessibilityPermission(rerunCommand: "make gui-smoke-test")
+    try requireAccessibilityPermission(rerunCommand: "nix develop --command -- make gui-smoke-test")
 
     let originalInputSourceID = currentInputSourceID()
     defer {

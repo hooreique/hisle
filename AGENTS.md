@@ -96,17 +96,19 @@
 
 ## Always Apply
 
-- Prefer `make` targets for stable local workflows. Use `make help` to list
-  available commands.
-- Use the pinned Swift from `flake.nix` for Swift and SwiftPM work. Run Swift
-  commands through `nix develop --ignore-environment --command -- swift ...`;
-  do not call `/usr/bin/swift` directly.
-- Run Xcode-oriented Make targets through the `xcode-work` shell, for example
-  `nix develop .#xcode-work --command -- make build`.
+- Prefer `make` targets from the owning Nix dev shell for stable local
+  workflows. Use `nix develop --command -- make help` to list available
+  commands.
+- Use the pinned Swift from `flake.nix` for Swift and SwiftPM work. Run
+  `hisle-core` Swift commands through the `core` shell, for example
+  `nix develop .#core --command -- swift ...`; do not call `/usr/bin/swift`
+  directly.
+- Run Xcode-oriented Make targets through the default shell, for example
+  `nix develop --command -- make build`.
 - Do not run the input method directly from Xcode as the primary test path.
   Build it, install it into `~/Library/Input Methods`, then select it as an
   input source in System Settings.
-- Keep helper scripts in Nushell and run them through the Nix dev shell.
+- Keep helper scripts in Nushell and run them through the owning Nix dev shell.
 - Keep InputMethodKit-specific code in `hisle/InputMethod/` thin. Put testable
   Hangul composition behavior in `hisle-core/` where possible.
 - Use project terminology from `docs/terminology.md` in conversations,
@@ -116,11 +118,16 @@
 
 ## Verification Routing
 
-- For core behavior changes, run `make core-spec-check`.
+- For core behavior changes, run
+  `nix develop .#core --command -- make core-spec-check`.
 - For InputMethodKit, mode switching, modifier handling, shortcut forwarding,
-  or bundled CLI behavior changes, run `make gui-smoke-test` when local GUI
+  or bundled CLI behavior changes, run
+  `nix develop --command -- make gui-smoke-test` when local GUI prerequisites
+  are available.
+- For Chrome IME diagnostics, run
+  `nix develop .#browser --command -- make chrome-ime-repro` when local GUI
   prerequisites are available.
-- For Chrome IME diagnostics, run `make chrome-ime-repro` when local GUI
-  prerequisites are available.
-- For icon changes, run `make icons` and build the app when relevant.
-- For version ownership changes, run `make version-check`.
+- For icon changes, run `nix develop .#icon --command -- make icons` and build
+  the app when relevant.
+- For version ownership changes, run
+  `nix develop --command -- make version-check`.

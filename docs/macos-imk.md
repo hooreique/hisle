@@ -22,8 +22,8 @@ handling, Escape behavior, host action forwarding, shortcut forwarding, or the
 boundary between Roman mode and Hangul mode.
 
 The current visible input source is `hisle`. It starts in Roman mode with
-Colemak output, uses Cole Sebeol in Hangul mode, and leaves command/control
-shortcuts to the host app after flushing active composition.
+Colemak output, uses Cole Sebeol in Hangul mode, and forwards host shortcuts
+after flushing active composition.
 
 Treat left Shift single tap as Roman mode selection and right Shift single tap
 as Hangul mode selection, as specified in `docs/input-modes.md`.
@@ -41,13 +41,13 @@ TIS entries.
 Build the macOS input method app:
 
 ```sh
-nix develop .#xcode-work --command -- make build
+nix develop --command -- make build
 ```
 
 Debug install into `~/Library/Input Methods`:
 
 ```sh
-make install-debug
+nix develop --command -- make install-debug
 ```
 
 Direct debug install script:
@@ -59,7 +59,7 @@ nix develop --command -- nu tools/install_debug.nu
 Remove the local debug install:
 
 ```sh
-make uninstall
+nix develop --command -- make uninstall
 ```
 
 Direct uninstall script:
@@ -73,9 +73,9 @@ it, install it into `~/Library/Input Methods`, then select it as an input source
 in System Settings.
 
 For InputMethodKit, mode switching, modifier handling, shortcut forwarding, or
-bundled CLI behavior changes, run `make gui-smoke-test` when the local GUI
-prerequisites are available. The GUI smoke test details live in
-`docs/testing.md`.
+bundled CLI behavior changes, run
+`nix develop --command -- make gui-smoke-test` when the local GUI prerequisites
+are available. The GUI smoke test details live in `docs/testing.md`.
 
 ## Companion CLI
 
@@ -97,11 +97,11 @@ no-option output is part of the smoke test.
 
 All builds emit `controller runtime` lifecycle notices when an input method
 controller is initialized or activated. Each notice includes `stage`,
-`buildProfile`, `appVersion`, `build`, `pid`, `bundle`, and
+`buildProfile`, `appVersion`, `coreVersion`, `build`, `pid`, `bundle`, and
 `replacementPolicy` so Debug and Release binaries can be matched to the
-installed app being tested, even when a manual `log stream` starts after the
-process was launched. The `buildProfile` field is `debug` or `release`; the
-`build` field comes from `CFBundleVersion`, which is owned by
+installed app and core library being tested, even when a manual `log stream`
+starts after the process was launched. The `buildProfile` field is `debug` or
+`release`; the `build` field comes from `CFBundleVersion`, which is owned by
 `CURRENT_PROJECT_VERSION`.
 
 Debug builds can opt into noisy IMK client range traces with the

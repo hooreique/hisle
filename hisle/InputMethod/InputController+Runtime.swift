@@ -16,6 +16,7 @@ extension InputController {
             "controller runtime stage=\(stage)",
             "buildProfile=\(Self.buildProfile)",
             "appVersion=\(Self.bundleInfoValue(for: "CFBundleShortVersionString"))",
+            "coreVersion=\(HisleCore.version)",
             "build=\(Self.bundleInfoValue(for: "CFBundleVersion"))",
             "pid=\(ProcessInfo.processInfo.processIdentifier)",
             "bundle=\(Bundle.main.bundleURL.path)",

@@ -631,7 +631,9 @@ private func typeDoubleClickSelectionAnnyeonghaseyoSequence(
 
 private func runChromeDriver() throws {
     let options = try DriverOptions.parse(arguments: Array(CommandLine.arguments.dropFirst()))
-    try requireAccessibilityPermission(rerunCommand: "make chrome-ime-repro")
+    try requireAccessibilityPermission(
+        rerunCommand: "nix develop .#browser --command -- make chrome-ime-repro"
+    )
     try waitForObserverReadiness(options.readyFile)
     let observerReady = ObserverReadyMetadata.load(from: options.readyFile)
 

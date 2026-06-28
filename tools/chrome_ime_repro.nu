@@ -152,7 +152,8 @@ if not (([$root_dir $observer_dir "node_modules" "playwright-core" "package.json
 }
 
 print "Compiling Chrome IME Swift driver..."
-^swiftc $support_source $driver_source -o $driver_output
+hide-env -i CC CXX LD SDKROOT NIX_CC NIX_CFLAGS_COMPILE NIX_CFLAGS_LINK NIX_LDFLAGS
+^/usr/bin/xcrun swiftc $support_source $driver_source -o $driver_output
 
 let macos_version = command-text { ^/usr/bin/sw_vers -productVersion }
 let hisle_cli = [$env.HOME "Library" "Input Methods" "hisle.app" "Contents" "Helpers" "hisle"] | path join

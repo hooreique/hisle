@@ -89,7 +89,7 @@ The reproduction is prepared under the Chrome IME diagnostics tooling.
 Executed on 2026-06-27 10:26-10:27 KST:
 
 ```sh
-make gui-smoke-test
+nix develop --command -- make gui-smoke-test
 ```
 
 Result: passed with exit status 0.
@@ -119,7 +119,7 @@ Stale selected-range model:
 env \
   HISLE_CHROME_SCENARIO=stale-selection-annyeonghaseyo \
   RUN_ID=stale-selection-annyeonghaseyo \
-  nix develop .#browser-work --command -- nu tools/chrome_ime_repro.nu
+  nix develop .#browser --command -- nu tools/chrome_ime_repro.nu
 ```
 
 Fixed result:
@@ -143,7 +143,7 @@ env \
   HISLE_CHROME_INITIAL_SELECTION='0:7' \
   EXPECTED_VALUE='안녕하세요' \
   RUN_ID=fix-014-selected-range-control \
-  nix develop .#browser-work --command -- nu tools/chrome_ime_repro.nu
+  nix develop .#browser --command -- nu tools/chrome_ime_repro.nu
 ```
 
 Control result:
