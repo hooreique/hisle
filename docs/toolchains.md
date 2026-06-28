@@ -31,6 +31,15 @@ Version ownership check:
 make version-check
 ```
 
+Lint Swift sources with SwiftLint:
+
+```sh
+make swiftlint
+```
+
+SwiftLint uses `.swiftlint.yml` and excludes generated SwiftPM build output
+under `hisle-core/.build`.
+
 Xcode-oriented dev shell check:
 
 ```sh

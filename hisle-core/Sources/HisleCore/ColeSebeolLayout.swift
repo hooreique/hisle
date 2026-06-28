@@ -127,15 +127,21 @@ public struct ColeSebeolLayout: Equatable, Sendable {
             }
         }
 
-        for representative in keyMappings.keys where !Self.printableRepresentativeScalars.contains(representative.value) {
+        for representative in keyMappings.keys
+            where !Self.printableRepresentativeScalars.contains(representative.value) {
             issues.append(.init(message: "unexpected key row outside printable ASCII: \(formatScalar(representative))"))
         }
 
-        for representative in underlyingRomanMappings.keys where !Self.printableRepresentativeScalars.contains(representative.value) {
-            issues.append(.init(message: "unexpected underlying-key row outside printable ASCII: \(formatScalar(representative))"))
+        for representative in underlyingRomanMappings.keys
+            where !Self.printableRepresentativeScalars.contains(representative.value) {
+            issues.append(.init(
+                message: "unexpected underlying-key row outside printable ASCII: " +
+                    "\(formatScalar(representative))"
+            ))
         }
 
-        for jamo in referencedJamoScalars.sorted(by: { $0.value < $1.value }) where compatibilityJamoMappings[jamo] == nil {
+        for jamo in referencedJamoScalars.sorted(by: { $0.value < $1.value })
+            where compatibilityJamoMappings[jamo] == nil {
             issues.append(.init(message: "missing compat-jamo row for \(formatScalar(jamo))"))
         }
 

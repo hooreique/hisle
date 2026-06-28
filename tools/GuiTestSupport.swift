@@ -1,3 +1,5 @@
+// swiftlint:disable file_length
+
 import ApplicationServices
 import Carbon
 import Cocoa
@@ -15,21 +17,21 @@ enum GuiTestFailure: Error, CustomStringConvertible {
 }
 
 enum KeyCode {
-    static let a: CGKeyCode = 0
-    static let b: CGKeyCode = 11
-    static let c: CGKeyCode = 8
-    static let d: CGKeyCode = 2
-    static let e: CGKeyCode = 14
-    static let f: CGKeyCode = 3
-    static let g: CGKeyCode = 5
-    static let h: CGKeyCode = 4
-    static let j: CGKeyCode = 38
-    static let k: CGKeyCode = 40
-    static let m: CGKeyCode = 46
-    static let n: CGKeyCode = 45
-    static let r: CGKeyCode = 15
-    static let s: CGKeyCode = 1
-    static let t: CGKeyCode = 17
+    static let repA: CGKeyCode = 0
+    static let repB: CGKeyCode = 11
+    static let repC: CGKeyCode = 8
+    static let repD: CGKeyCode = 2
+    static let repE: CGKeyCode = 14
+    static let repF: CGKeyCode = 3
+    static let repG: CGKeyCode = 5
+    static let repH: CGKeyCode = 4
+    static let repJ: CGKeyCode = 38
+    static let repK: CGKeyCode = 40
+    static let repM: CGKeyCode = 46
+    static let repN: CGKeyCode = 45
+    static let repR: CGKeyCode = 15
+    static let repS: CGKeyCode = 1
+    static let repT: CGKeyCode = 17
     static let one: CGKeyCode = 18
     static let two: CGKeyCode = 19
     static let three: CGKeyCode = 20
@@ -124,7 +126,7 @@ final class KeyboardDriver {
 
 extension KeyboardDriver {
     func saveUsingColemakShortcut() throws {
-        try tapCommandShortcut(KeyCode.d)
+        try tapCommandShortcut(KeyCode.repD)
     }
 }
 
@@ -132,8 +134,9 @@ let hisleInputSourceID = "hooreique.inputmethod.hisle.main"
 let fallbackRoundTripInputSourceIDs = [
     "com.apple.keylayout.ABC",
     "com.apple.keylayout.US",
-    "com.apple.keylayout.Colemak",
+    "com.apple.keylayout.Colemak"
 ]
+let inputSourceActivationTimeout: TimeInterval = 2.0
 let cliModePropagationTimeout: TimeInterval = 2.0
 let hisleCLIURL = FileManager.default.homeDirectoryForCurrentUser
     .appendingPathComponent("Library")
@@ -158,7 +161,7 @@ final class HisleLogStream {
             "stream",
             "--style", "compact",
             "--level", "debug",
-            "--predicate", "subsystem == \"hooreique.inputmethod.hisle\"",
+            "--predicate", "subsystem == \"hooreique.inputmethod.hisle\""
         ]
 
         if let outputURL {
@@ -191,7 +194,8 @@ func requireAccessibilityPermission(rerunCommand: String) throws {
     guard AXIsProcessTrustedWithOptions(options) else {
         throw GuiTestFailure.message(
             "Accessibility permission is required to send GUI key events. " +
-            "Grant permission to the terminal/Codex process in System Settings > Privacy & Security > Accessibility, then rerun \(rerunCommand)."
+                "Grant permission to the terminal/Codex process in System Settings > " +
+                "Privacy & Security > Accessibility, then rerun \(rerunCommand)."
         )
     }
 }
@@ -203,6 +207,16 @@ func inputSourceID(for source: TISInputSource) -> String? {
     return Unmanaged<CFString>.fromOpaque(pointer).takeUnretainedValue() as String
 }
 
+private func inputSources(matching filter: CFDictionary) -> [TISInputSource] {
+    let sources = TISCreateInputSourceList(filter, true).takeRetainedValue()
+    return (0..<CFArrayGetCount(sources)).compactMap { index in
+        guard let sourcePointer = CFArrayGetValueAtIndex(sources, index) else {
+            return nil
+        }
+        return Unmanaged<TISInputSource>.fromOpaque(sourcePointer).takeUnretainedValue()
+    }
+}
+
 func currentInputSourceID() -> String? {
     guard let source = TISCopyCurrentKeyboardInputSource()?.takeRetainedValue() else {
         return nil
@@ -212,8 +226,7 @@ func currentInputSourceID() -> String? {
 
 func inputSourceExists(id: String) -> Bool {
     let filter = [kTISPropertyInputSourceID as String: id] as CFDictionary
-    let sources = TISCreateInputSourceList(filter, true).takeRetainedValue() as NSArray
-    return sources.count > 0
+    return !inputSources(matching: filter).isEmpty
 }
 
 func roundTripInputSourceID(prefer originalID: String?) -> String? {
@@ -228,10 +241,8 @@ func roundTripInputSourceID(prefer originalID: String?) -> String? {
     }
 
     let filter = [kTISPropertyInputSourceCategory as String: kTISCategoryKeyboardInputSource] as CFDictionary
-    let sources = TISCreateInputSourceList(filter, true).takeRetainedValue() as NSArray
 
-    for sourceValue in sources {
-        let source = sourceValue as! TISInputSource
+    for source in inputSources(matching: filter) {
         guard let id = inputSourceID(for: source),
               id != hisleInputSourceID else {
             continue
@@ -244,15 +255,14 @@ func roundTripInputSourceID(prefer originalID: String?) -> String? {
 
 func selectInputSource(id: String) throws {
     let filter = [kTISPropertyInputSourceID as String: id] as CFDictionary
-    let sources = TISCreateInputSourceList(filter, true).takeRetainedValue() as NSArray
 
-    guard sources.count > 0 else {
+    guard let source = inputSources(matching: filter).first else {
         throw GuiTestFailure.message(
-            "Input source \(id) was not found. Run make install-debug and enable hisle in System Settings > Keyboard > Input Sources."
+            "Input source \(id) was not found. Run make install-debug and enable hisle " +
+                "in System Settings > Keyboard > Input Sources."
         )
     }
 
-    let source = sources[0] as! TISInputSource
     let enableStatus = TISEnableInputSource(source)
     guard enableStatus == noErr else {
         throw GuiTestFailure.message("Could not enable input source \(id): OSStatus \(enableStatus).")
@@ -263,8 +273,19 @@ func selectInputSource(id: String) throws {
         throw GuiTestFailure.message("Could not select input source \(id): OSStatus \(selectStatus).")
     }
 
-    guard wait(timeout: 2.0, interval: 0.05, until: { currentInputSourceID() == id }) else {
-        throw GuiTestFailure.message("Timed out waiting for input source \(id) to become active.")
+    var observedInputSourceID = currentInputSourceID()
+    guard wait(
+        timeout: inputSourceActivationTimeout,
+        interval: 0.05,
+        until: {
+            observedInputSourceID = currentInputSourceID()
+            return observedInputSourceID == id
+        }
+    ) else {
+        throw GuiTestFailure.message(
+            "Timed out waiting for input source \(id) to become active. " +
+                "Last observed input source: \(observedInputSourceID ?? "<none>")."
+        )
     }
 }
 
@@ -294,63 +315,46 @@ func runningApplication(bundleIDs: [String], appName: String) -> NSRunningApplic
     }
 }
 
-func focusedWindowTitle(for app: NSRunningApplication) -> String? {
+private func accessibilityAttribute<T>(_ attribute: CFString, of element: AXUIElement) -> T? {
+    var value: CFTypeRef?
+    guard AXUIElementCopyAttributeValue(element, attribute, &value) == .success,
+          let value else {
+        return nil
+    }
+    return value as? T
+}
+
+private func focusedWindow(for app: NSRunningApplication) -> AXUIElement? {
     let element = AXUIElementCreateApplication(app.processIdentifier)
-    var windowValue: CFTypeRef?
-    guard AXUIElementCopyAttributeValue(element, kAXFocusedWindowAttribute as CFString, &windowValue) == .success,
-          let window = windowValue else {
+    return accessibilityAttribute(kAXFocusedWindowAttribute as CFString, of: element)
+}
+
+func focusedWindowTitle(for app: NSRunningApplication) -> String? {
+    guard let window = focusedWindow(for: app) else {
         return nil
     }
 
-    var titleValue: CFTypeRef?
-    guard AXUIElementCopyAttributeValue(window as! AXUIElement, kAXTitleAttribute as CFString, &titleValue) == .success else {
-        return nil
-    }
-
-    return titleValue as? String
+    return accessibilityAttribute(kAXTitleAttribute as CFString, of: window)
 }
 
 func focusedWindowFrame(for app: NSRunningApplication) -> CGRect? {
-    let element = AXUIElementCreateApplication(app.processIdentifier)
-    var windowValue: CFTypeRef?
-    guard AXUIElementCopyAttributeValue(element, kAXFocusedWindowAttribute as CFString, &windowValue) == .success,
-          let window = windowValue else {
+    guard let window = focusedWindow(for: app) else {
         return nil
     }
 
-    var positionValue: CFTypeRef?
-    var sizeValue: CFTypeRef?
-    guard AXUIElementCopyAttributeValue(window as! AXUIElement, kAXPositionAttribute as CFString, &positionValue) == .success,
-          AXUIElementCopyAttributeValue(window as! AXUIElement, kAXSizeAttribute as CFString, &sizeValue) == .success,
-          let positionAXValue = positionValue,
-          let sizeAXValue = sizeValue else {
-        return nil
-    }
-
-    var position = CGPoint.zero
-    var size = CGSize.zero
-    guard AXValueGetValue(positionAXValue as! AXValue, .cgPoint, &position),
-          AXValueGetValue(sizeAXValue as! AXValue, .cgSize, &size) else {
-        return nil
-    }
-
-    return CGRect(origin: position, size: size)
+    return frame(of: window)
 }
 
 private func frame(of element: AXUIElement) -> CGRect? {
-    var positionValue: CFTypeRef?
-    var sizeValue: CFTypeRef?
-    guard AXUIElementCopyAttributeValue(element, kAXPositionAttribute as CFString, &positionValue) == .success,
-          AXUIElementCopyAttributeValue(element, kAXSizeAttribute as CFString, &sizeValue) == .success,
-          let positionAXValue = positionValue,
-          let sizeAXValue = sizeValue else {
+    guard let positionValue: AXValue = accessibilityAttribute(kAXPositionAttribute as CFString, of: element),
+          let sizeValue: AXValue = accessibilityAttribute(kAXSizeAttribute as CFString, of: element) else {
         return nil
     }
 
     var position = CGPoint.zero
     var size = CGSize.zero
-    guard AXValueGetValue(positionAXValue as! AXValue, .cgPoint, &position),
-          AXValueGetValue(sizeAXValue as! AXValue, .cgSize, &size) else {
+    guard AXValueGetValue(positionValue, .cgPoint, &position),
+          AXValueGetValue(sizeValue, .cgSize, &size) else {
         return nil
     }
 
@@ -366,16 +370,12 @@ private func firstAccessibilityDescendant(
         return nil
     }
 
-    var roleValue: CFTypeRef?
-    if AXUIElementCopyAttributeValue(element, kAXRoleAttribute as CFString, &roleValue) == .success,
-       let role = roleValue as? String,
+    if let role: String = accessibilityAttribute(kAXRoleAttribute as CFString, of: element),
        role == expectedRole {
         return element
     }
 
-    var childrenValue: CFTypeRef?
-    guard AXUIElementCopyAttributeValue(element, kAXChildrenAttribute as CFString, &childrenValue) == .success,
-          let children = childrenValue as? [AXUIElement] else {
+    guard let children: [AXUIElement] = accessibilityAttribute(kAXChildrenAttribute as CFString, of: element) else {
         return nil
     }
 
@@ -389,14 +389,11 @@ private func firstAccessibilityDescendant(
 }
 
 func focusedWebAreaFrame(for app: NSRunningApplication) -> CGRect? {
-    let application = AXUIElementCreateApplication(app.processIdentifier)
-    var windowValue: CFTypeRef?
-    guard AXUIElementCopyAttributeValue(application, kAXFocusedWindowAttribute as CFString, &windowValue) == .success,
-          let window = windowValue else {
+    guard let window = focusedWindow(for: app) else {
         return nil
     }
 
-    guard let webArea = firstAccessibilityDescendant(of: window as! AXUIElement, role: "AXWebArea") else {
+    guard let webArea = firstAccessibilityDescendant(of: window, role: "AXWebArea") else {
         return nil
     }
 
@@ -411,10 +408,8 @@ func activate(_ app: NSRunningApplication) {
     }
 
     let element = AXUIElementCreateApplication(app.processIdentifier)
-    var windowValue: CFTypeRef?
-    if AXUIElementCopyAttributeValue(element, kAXFocusedWindowAttribute as CFString, &windowValue) == .success,
-       let windowValue {
-        AXUIElementPerformAction(windowValue as! AXUIElement, kAXRaiseAction as CFString)
+    if let window: AXUIElement = accessibilityAttribute(kAXFocusedWindowAttribute as CFString, of: element) {
+        AXUIElementPerformAction(window, kAXRaiseAction as CFString)
     }
 }
 
@@ -577,7 +572,8 @@ func waitForValue<T>(timeout: TimeInterval, interval: TimeInterval, producer: ()
 func runHisleCLI(arguments: [String] = []) throws -> String {
     guard FileManager.default.isExecutableFile(atPath: hisleCLIURL.path) else {
         throw GuiTestFailure.message(
-            "Bundled hisle CLI was not found or is not executable at \(hisleCLIURL.path). Run make install-debug, then rerun the GUI test."
+            "Bundled hisle CLI was not found or is not executable at \(hisleCLIURL.path). " +
+                "Run make install-debug, then rerun the GUI test."
         )
     }
 
@@ -608,7 +604,8 @@ func runHisleCLI(arguments: [String] = []) throws -> String {
 
     guard process.terminationStatus == 0 else {
         throw GuiTestFailure.message(
-            "Bundled hisle CLI exited with status \(process.terminationStatus). stderr: \(String(reflecting: stderrText))"
+            "Bundled hisle CLI exited with status \(process.terminationStatus). " +
+                "stderr: \(String(reflecting: stderrText))"
         )
     }
 
@@ -636,7 +633,8 @@ func verifyHisleCLIMode(_ expected: String, stage: String) throws {
         }
 
         throw GuiTestFailure.message(
-            "\(stage) CLI mode verification failed. Expected \(String(reflecting: expected)), got \(String(reflecting: lastOutput))."
+            "\(stage) CLI mode verification failed. Expected \(String(reflecting: expected)), " +
+                "got \(String(reflecting: lastOutput))."
         )
     }
 

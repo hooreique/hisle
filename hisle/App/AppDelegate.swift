@@ -7,7 +7,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         UserDefaults.standard.register(defaults: [
-            "NSApplicationCrashOnExceptions": true,
+            "NSApplicationCrashOnExceptions": true
         ])
 
         _ = InputMethodServer.shared

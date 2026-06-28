@@ -14,6 +14,7 @@
       packages = [
         pkgs.nushell
         pkgs.swift
+        pkgs.swiftlint
         pkgs.swiftpm
         pkgs.undmg
       ];

@@ -5,7 +5,7 @@ import PackageDescription
 let package = Package(
     name: "hisle-core",
     platforms: [
-        .macOS(.v14),
+        .macOS(.v14)
     ],
     products: [
         .library(
@@ -17,18 +17,18 @@ let package = Package(
         .executable(
             name: "hisle-core-spec-check",
             targets: ["HisleCoreSpecCheck"]
-        ),
+        )
     ],
     targets: [
         .target(
             name: "HisleCore",
             resources: [
-                .process("Resources/cole-sebeol-spec.txt"),
+                .process("Resources/cole-sebeol-spec.txt")
             ]
         ),
         .executableTarget(
             name: "HisleCoreSpecCheck",
             dependencies: ["HisleCore"]
-        ),
+        )
     ]
 )

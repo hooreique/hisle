@@ -237,7 +237,11 @@ public struct ColeSebeolEngine: Sendable {
     private func visibleText(for composition: ColeSebeolComposition) -> String {
         if let choseong = composition.choseong?.scalar,
            let jungseong = composition.jungseong?.scalar,
-           let syllable = composeSyllable(choseong: choseong, jungseong: jungseong, jongseong: composition.jongseong?.scalar) {
+           let syllable = composeSyllable(
+               choseong: choseong,
+               jungseong: jungseong,
+               jongseong: composition.jongseong?.scalar
+           ) {
             return String(syllable)
         }
 
@@ -327,7 +331,7 @@ private let choseongIndexes: [UInt32: UInt32] = [
     0x1100: 0, 0x1101: 1, 0x1102: 2, 0x1103: 3, 0x1104: 4,
     0x1105: 5, 0x1106: 6, 0x1107: 7, 0x1108: 8, 0x1109: 9,
     0x110A: 10, 0x110B: 11, 0x110C: 12, 0x110D: 13, 0x110E: 14,
-    0x110F: 15, 0x1110: 16, 0x1111: 17, 0x1112: 18,
+    0x110F: 15, 0x1110: 16, 0x1111: 17, 0x1112: 18
 ]
 
 private func composeSyllable(

@@ -14,6 +14,9 @@ final class InputMethodServer {
         }
 
         server = IMKServer(name: connectionName, bundleIdentifier: bundle.bundleIdentifier)
-        logger.notice("server started: connection=\(connectionName, privacy: .public) bundle=\(bundle.bundleIdentifier ?? "", privacy: .public)")
+        let bundleID = bundle.bundleIdentifier ?? ""
+        logger.notice(
+            "server started: connection=\(connectionName, privacy: .public) bundle=\(bundleID, privacy: .public)"
+        )
     }
 }

@@ -87,6 +87,10 @@ This smoke test passes only if the final saved file content is exactly
 
 Known non-issues:
 
+- The first run after a debug install may occasionally fail once while waiting
+  for the final input-source round trip to become active. If the setup looked
+  correct and focus was not changed manually, rerun `make gui-smoke-test` once
+  before treating it as a regression.
 - Xcode may print CoreSimulator version warnings while building this macOS input
   method target. Treat them as noise unless the build fails.
 - Xcode may print AppIntents metadata extraction warnings such as skipped

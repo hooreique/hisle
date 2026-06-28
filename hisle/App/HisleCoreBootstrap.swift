@@ -20,7 +20,7 @@ struct HisleCoreBootstrap {
             "map=\(layout.mapID)",
             "combination=\(layout.combinationID)",
             "keys=\(layout.keyMappings.count)",
-            "underlyingKeys=\(layout.underlyingRomanMappings.count)",
+            "underlyingKeys=\(layout.underlyingRomanMappings.count)"
         ].joined(separator: " ")
     }
 

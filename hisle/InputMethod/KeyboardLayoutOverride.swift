@@ -16,7 +16,8 @@ enum KeyboardLayoutOverride {
             textInput.overrideKeyboard(withKeyboardNamed: colemakInputSourceID)
 #if DEBUG
             if logSuccess {
-                logger.notice("requested keyboard layout override via IMK client: \(colemakInputSourceID, privacy: .public)")
+                let message = "requested keyboard layout override via IMK client: \(colemakInputSourceID)"
+                logger.notice("\(message, privacy: .public)")
             }
 #endif
             return true
@@ -28,14 +29,19 @@ enum KeyboardLayoutOverride {
     @discardableResult
     static func installColemakThroughTIS(logSuccess: Bool = false) -> Bool {
         let filter = [kTISPropertyInputSourceID as String: colemakInputSourceID] as CFDictionary
-        let sources = TISCreateInputSourceList(filter, true).takeRetainedValue() as NSArray
+        let sources = TISCreateInputSourceList(filter, true).takeRetainedValue()
 
-        guard sources.count > 0 else {
+        guard CFArrayGetCount(sources) > 0 else {
             logger.error("could not find keyboard layout source: \(colemakInputSourceID, privacy: .public)")
             return false
         }
 
-        let source = sources[0] as! TISInputSource
+        guard let sourcePointer = CFArrayGetValueAtIndex(sources, 0) else {
+            logger.error("keyboard layout source has unexpected type: \(colemakInputSourceID, privacy: .public)")
+            return false
+        }
+
+        let source = Unmanaged<TISInputSource>.fromOpaque(sourcePointer).takeUnretainedValue()
         let status = TISSetInputMethodKeyboardLayoutOverride(source)
         guard status == noErr else {
             logger.error("could not set keyboard layout override through TIS: OSStatus \(status, privacy: .public)")

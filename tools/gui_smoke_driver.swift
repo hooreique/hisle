@@ -1,3 +1,6 @@
+// swiftlint:disable:next blanket_disable_command
+// swiftlint:disable function_body_length
+
 import Cocoa
 import Foundation
 
@@ -44,7 +47,8 @@ private func launchSublime(with fileURL: URL) throws {
 
     guard process.terminationStatus == 0 else {
         throw GuiTestFailure.message(
-            "Could not open \(sublimeAppName). Confirm it is installed from \(sublimeDownloadURL), then rerun make gui-smoke-test."
+            "Could not open \(sublimeAppName). Confirm it is installed from " +
+                "\(sublimeDownloadURL), then rerun make gui-smoke-test."
         )
     }
 }
@@ -89,7 +93,8 @@ private func focusSublimeSmokeFile() throws -> NSRunningApplication {
         let title = focusedWindowTitle(for: app) ?? "<unknown>"
         throw GuiTestFailure.message(
             "\(sublimeAppName) is not focused on the smoke-test file. " +
-            "Frontmost app: \(frontmost). \(sublimeAppName) front window title: \(title). Refusing to send GUI key events."
+                "Frontmost app: \(frontmost). \(sublimeAppName) front window title: \(title). " +
+                "Refusing to send GUI key events."
         )
     }
 
@@ -152,21 +157,21 @@ private func runSmokeTest() throws {
     try verifyHisleCLIMode("roman", stage: "Initial hisle selection")
 
     print("Typing smoke sequence: initial E, right Shift, backtick, j g d, Escape, E, right Shift, j t b")
-    try keyboard.tapKey(KeyCode.e)
+    try keyboard.tapKey(KeyCode.repE)
     try keyboard.tapModifier(KeyCode.rightShift, flag: .maskShift)
     try verifyHisleCLIMode("hangul", stage: "Right Shift")
     try keyboard.tapKey(KeyCode.backtick)
-    try keyboard.tapKey(KeyCode.j)
-    try keyboard.tapKey(KeyCode.g)
-    try keyboard.tapKey(KeyCode.d)
+    try keyboard.tapKey(KeyCode.repJ)
+    try keyboard.tapKey(KeyCode.repG)
+    try keyboard.tapKey(KeyCode.repD)
     try keyboard.tapKey(KeyCode.escape)
     try verifyHisleCLIMode("roman", stage: "Escape")
-    try keyboard.tapKey(KeyCode.e)
+    try keyboard.tapKey(KeyCode.repE)
     try keyboard.tapModifier(KeyCode.rightShift, flag: .maskShift)
     try verifyHisleCLIMode("hangul", stage: "Second right Shift")
-    try keyboard.tapKey(KeyCode.j)
-    try keyboard.tapKey(KeyCode.t)
-    try keyboard.tapKey(KeyCode.b)
+    try keyboard.tapKey(KeyCode.repJ)
+    try keyboard.tapKey(KeyCode.repT)
+    try keyboard.tapKey(KeyCode.repB)
 
     print("Saving text after Hangul sequence with Command+representative d, which is Colemak Command+S")
     try keyboard.saveUsingColemakShortcut()
@@ -175,7 +180,7 @@ private func runSmokeTest() throws {
     print("Completing smoke sequence: left Shift, E, final save")
     try keyboard.tapModifier(KeyCode.leftShift, flag: .maskShift)
     try verifyHisleCLIMode("roman", stage: "Left Shift")
-    try keyboard.tapKey(KeyCode.e)
+    try keyboard.tapKey(KeyCode.repE)
     try keyboard.saveUsingColemakShortcut()
     try verifySavedFileContents(expectedRomanSaveText, stage: "Roman-mode")
 
@@ -187,7 +192,7 @@ private func runSmokeTest() throws {
     let roundTripFocusedApp = try focusSublimeSmokeFile()
     try clickFocusedWindowCenter(of: roundTripFocusedApp, appName: sublimeAppName)
     try verifyHisleCLIMode("roman", stage: "Input-source round-trip")
-    try keyboard.tapKey(KeyCode.e)
+    try keyboard.tapKey(KeyCode.repE)
     try keyboard.saveUsingColemakShortcut()
     try verifySavedFileContents(expectedText, stage: "Input-source round-trip")
 

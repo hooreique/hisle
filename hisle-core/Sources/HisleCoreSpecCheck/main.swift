@@ -1,3 +1,6 @@
+// swiftlint:disable:next blanket_disable_command
+// swiftlint:disable file_length function_body_length
+
 import Darwin
 import Foundation
 import HisleCore
@@ -26,10 +29,10 @@ private let expectedColeSebeolOutputByRepresentative: [UInt32: UInt32] = [
     0x71: 0x11BA, 0x72: 0x1162, 0x73: 0x11AB, 0x74: 0x1165,
     0x75: 0x1103, 0x76: 0x1169, 0x77: 0x11AF, 0x78: 0x11A8,
     0x79: 0x1105, 0x7A: 0x11B7, 0x7B: 0x007B, 0x7C: 0x007C,
-    0x7D: 0x007D, 0x7E: 0x007E,
+    0x7D: 0x007D, 0x7E: 0x007E
 ]
 
-private let expectedColemakUnderlyingByRepresentative: [UInt32: UInt32] = [
+private let expectedColemakByRepKey: [UInt32: UInt32] = [
     0x21: 0x21, 0x22: 0x22, 0x23: 0x23, 0x24: 0x24, 0x25: 0x25,
     0x26: 0x26, 0x27: 0x27, 0x28: 0x28, 0x29: 0x29, 0x2A: 0x2A,
     0x2B: 0x2B, 0x2C: 0x2C, 0x2D: 0x2D, 0x2E: 0x2E, 0x2F: 0x2F,
@@ -48,7 +51,7 @@ private let expectedColemakUnderlyingByRepresentative: [UInt32: UInt32] = [
     0x6C: 0x69, 0x6D: 0x6D, 0x6E: 0x6B, 0x6F: 0x79, 0x70: 0x3B,
     0x71: 0x71, 0x72: 0x70, 0x73: 0x72, 0x74: 0x67, 0x75: 0x6C,
     0x76: 0x76, 0x77: 0x77, 0x78: 0x78, 0x79: 0x6A, 0x7A: 0x7A,
-    0x7B: 0x7B, 0x7C: 0x7C, 0x7D: 0x7D, 0x7E: 0x7E,
+    0x7B: 0x7B, 0x7C: 0x7C, 0x7D: 0x7D, 0x7E: 0x7E
 ]
 
 private let expectedCompatibilityJamo: [UInt32: UInt32] = [
@@ -74,52 +77,40 @@ private let expectedCompatibilityJamo: [UInt32: UInt32] = [
     0x11B9: 0x3144, 0x11BA: 0x3145, 0x11BB: 0x3146,
     0x11BC: 0x3147, 0x11BD: 0x3148, 0x11BE: 0x314A,
     0x11BF: 0x314B, 0x11C0: 0x314C, 0x11C1: 0x314D,
-    0x11C2: 0x314E,
+    0x11C2: 0x314E
 ]
 
-private let expectedJamoCombinations: [(UInt32, UInt32, UInt32)] = [
-    (0x110B, 0x1100, 0x1101), (0x1100, 0x110B, 0x1101),
-    (0x1100, 0x110C, 0x110D), (0x110C, 0x1100, 0x110D),
-    (0x110C, 0x1107, 0x1108), (0x1107, 0x110C, 0x1108),
-    (0x1103, 0x1106, 0x1104), (0x1106, 0x1103, 0x1104),
-    (0x1109, 0x1112, 0x110A), (0x1112, 0x1109, 0x110A),
-    (0x1175, 0x1161, 0x1164), (0x1161, 0x1175, 0x1164),
-    (0x1175, 0x1173, 0x1174), (0x1173, 0x1175, 0x1174),
-    (0x1167, 0x1162, 0x1168), (0x1162, 0x1167, 0x1168),
-    (0x11BC, 0x11AB, 0x11AD), (0x11AB, 0x11BC, 0x11AD),
-    (0x11BA, 0x11AF, 0x11B9), (0x11AF, 0x11BA, 0x11B9),
-    (0x11B8, 0x11BB, 0x11BD), (0x11BB, 0x11B8, 0x11BD),
-    (0x11C2, 0x11BB, 0x11A9), (0x11BB, 0x11C2, 0x11A9),
-    (0x11A8, 0x11A8, 0x11A9),
-    (0x11A8, 0x11BA, 0x11AA), (0x11AB, 0x11BD, 0x11AC),
-    (0x11AB, 0x11C2, 0x11AD), (0x11AF, 0x11A8, 0x11B0),
-    (0x11AF, 0x11B7, 0x11B1), (0x11AF, 0x11B8, 0x11B2),
-    (0x11AF, 0x11C0, 0x11B4), (0x11AF, 0x11C1, 0x11B5),
-    (0x11AF, 0x11C2, 0x11B6), (0x11B8, 0x11BA, 0x11B9),
-    (0x11BA, 0x11BA, 0x11BB),
+private let expectedJamoCombinations: [ExpectedJamoCombination] = [
+    .init(0x110B, 0x1100, 0x1101), .init(0x1100, 0x110B, 0x1101),
+    .init(0x1100, 0x110C, 0x110D), .init(0x110C, 0x1100, 0x110D),
+    .init(0x110C, 0x1107, 0x1108), .init(0x1107, 0x110C, 0x1108),
+    .init(0x1103, 0x1106, 0x1104), .init(0x1106, 0x1103, 0x1104),
+    .init(0x1109, 0x1112, 0x110A), .init(0x1112, 0x1109, 0x110A),
+    .init(0x1175, 0x1161, 0x1164), .init(0x1161, 0x1175, 0x1164),
+    .init(0x1175, 0x1173, 0x1174), .init(0x1173, 0x1175, 0x1174),
+    .init(0x1167, 0x1162, 0x1168), .init(0x1162, 0x1167, 0x1168),
+    .init(0x11BC, 0x11AB, 0x11AD), .init(0x11AB, 0x11BC, 0x11AD),
+    .init(0x11BA, 0x11AF, 0x11B9), .init(0x11AF, 0x11BA, 0x11B9),
+    .init(0x11B8, 0x11BB, 0x11BD), .init(0x11BB, 0x11B8, 0x11BD),
+    .init(0x11C2, 0x11BB, 0x11A9), .init(0x11BB, 0x11C2, 0x11A9),
+    .init(0x11A8, 0x11A8, 0x11A9),
+    .init(0x11A8, 0x11BA, 0x11AA), .init(0x11AB, 0x11BD, 0x11AC),
+    .init(0x11AB, 0x11C2, 0x11AD), .init(0x11AF, 0x11A8, 0x11B0),
+    .init(0x11AF, 0x11B7, 0x11B1), .init(0x11AF, 0x11B8, 0x11B2),
+    .init(0x11AF, 0x11C0, 0x11B4), .init(0x11AF, 0x11C1, 0x11B5),
+    .init(0x11AF, 0x11C2, 0x11B6), .init(0x11B8, 0x11BA, 0x11B9),
+    .init(0x11BA, 0x11BA, 0x11BB)
 ]
 
-private let expectedPositionalJamoCombinations: [(UInt32, UInt32, UInt32, UInt32)] = []
+private let expectedPositionalJamoCombinations: [ExpectedPositionalJamoCombination] = []
 
-private let expectedSourceKeyCombinations: [(Unicode.Scalar, Unicode.Scalar, UInt32)] = [
-    ("/", "f", 0x116A),
-    ("f", "/", 0x116A),
-    ("v", "f", 0x116A),
-    ("/", "r", 0x116B),
-    ("r", "/", 0x116B),
-    ("v", "r", 0x116B),
-    ("/", "d", 0x116C),
-    ("d", "/", 0x116C),
-    ("v", "d", 0x116C),
-    ("9", "t", 0x116F),
-    ("t", "9", 0x116F),
-    ("b", "t", 0x116F),
-    ("9", "c", 0x1170),
-    ("c", "9", 0x1170),
-    ("b", "c", 0x1170),
-    ("9", "d", 0x1171),
-    ("d", "9", 0x1171),
-    ("b", "d", 0x1171),
+private let expectedSourceKeyCombinations: [ExpectedSourceKeyCombination] = [
+    .init("/", "f", 0x116A), .init("f", "/", 0x116A), .init("v", "f", 0x116A),
+    .init("/", "r", 0x116B), .init("r", "/", 0x116B), .init("v", "r", 0x116B),
+    .init("/", "d", 0x116C), .init("d", "/", 0x116C), .init("v", "d", 0x116C),
+    .init("9", "t", 0x116F), .init("t", "9", 0x116F), .init("b", "t", 0x116F),
+    .init("9", "c", 0x1170), .init("c", "9", 0x1170), .init("b", "c", 0x1170),
+    .init("9", "d", 0x1171), .init("d", "9", 0x1171), .init("b", "d", 0x1171)
 ]
 
 private var failures: [String] = []
@@ -403,13 +394,13 @@ private func checkPrintableKeyMap(layout: ColeSebeolLayout) {
 private func checkUnderlyingRomanMap(layout: ColeSebeolLayout) {
     expectEqual(
         layout.underlyingRomanMappings.count,
-        expectedColemakUnderlyingByRepresentative.count,
+        expectedColemakByRepKey.count,
         "underlying roman map row count"
     )
 
     for value in ColeSebeolLayout.printableRepresentativeScalars {
         let representative = scalar(value)
-        guard let expectedValue = expectedColemakUnderlyingByRepresentative[value] else {
+        guard let expectedValue = expectedColemakByRepKey[value] else {
             expect(false, "missing independent Colemak expectation for \(hex(representative))")
             continue
         }
@@ -444,9 +435,9 @@ private func checkCombinationTables(layout: ColeSebeolLayout) {
         "jamo combination row count"
     )
     for expected in expectedJamoCombinations {
-        let first = scalar(expected.0)
-        let second = scalar(expected.1)
-        let result = scalar(expected.2)
+        let first = scalar(expected.first)
+        let second = scalar(expected.second)
+        let result = scalar(expected.result)
         expectEqualScalar(
             layout.combinedJamo(first: first, second: second),
             result,
@@ -460,10 +451,10 @@ private func checkCombinationTables(layout: ColeSebeolLayout) {
         "positional jamo combination row count"
     )
     for expected in expectedPositionalJamoCombinations {
-        let first = scalar(expected.0)
-        let representative = scalar(expected.1)
-        let second = scalar(expected.2)
-        let result = scalar(expected.3)
+        let first = scalar(expected.first)
+        let representative = scalar(expected.secondRepresentativeKey)
+        let second = scalar(expected.second)
+        let result = scalar(expected.result)
         expectEqualScalar(
             layout.positionalCombinedJamo(
                 first: first,
@@ -482,9 +473,9 @@ private func checkCombinationTables(layout: ColeSebeolLayout) {
     )
     for expected in expectedSourceKeyCombinations {
         expectEqualScalar(
-            layout.sourceCombinedJamo(firstSourceKey: expected.0, secondSourceKey: expected.1),
-            scalar(expected.2),
-            "\(expected.0) + \(expected.1) source-key combination"
+            layout.sourceCombinedJamo(firstSourceKey: expected.first, secondSourceKey: expected.second),
+            scalar(expected.result),
+            "\(expected.first) + \(expected.second) source-key combination"
         )
     }
 
@@ -496,7 +487,7 @@ private func checkCombinationTables(layout: ColeSebeolLayout) {
         ("c", "b"),
         ("d", "b"),
         ("/", "t"),
-        ("9", "f"),
+        ("9", "f")
     ]
     for pair in rejectedSourcePairs {
         expect(
@@ -533,7 +524,7 @@ private func checkChoseongFirstPolicy(layout: ColeSebeolLayout) {
         ("f k x", "ㅏㄱㄱ"),
         ("k x k", "ㄱㄱㄱ"),
         ("k x .", "ㄱㄱ."),
-        ("k x Space", "ㄱㄱ "),
+        ("k x Space", "ㄱㄱ ")
     ]
 
     for example in examples {
@@ -590,7 +581,7 @@ private func checkSlashNinePolicy(layout: ColeSebeolLayout) {
         ("k 9 d", "귀"),
         ("k d 9", "귀"),
         ("k b d", "귀"),
-        ("k d b", "기ㅜ"),
+        ("k d b", "기ㅜ")
     ]
 
     for example in examples {
@@ -633,7 +624,7 @@ private func checkWeakBelowPolicy(layout: ColeSebeolLayout) {
         ("k f 3 2", "갖"),
         ("k f 2 3", "갖"),
         ("k f 1 2", "갂"),
-        ("k f 2 1", "갂"),
+        ("k f 2 1", "갂")
     ]
 
     for example in examples {
@@ -656,7 +647,7 @@ private func checkNoChoseongAndFlushBoundaries(layout: ColeSebeolLayout) {
         ("k f x f", "각ㅏ"),
         ("k f x /", "각ㅗ"),
         ("k x f /", "각ㅗ"),
-        ("k 가", "ㄱ가"),
+        ("k 가", "ㄱ가")
     ]
 
     for example in examples {
@@ -680,7 +671,7 @@ private func checkMarkedTextAndBackspace(layout: ColeSebeolLayout) {
         ("k f x Backspace", "가"),
         ("/ f Backspace", "ㅗ"),
         ("f / Backspace", "ㅏ"),
-        ("v f Backspace", "ㅗ"),
+        ("v f Backspace", "ㅗ")
     ]
 
     for example in examples {
@@ -753,7 +744,7 @@ private func checkClearWhitespaceAndPrintableBoundaries(layout: ColeSebeolLayout
         ("k f M", "가;"),
         ("k f ?", "가!"),
         ("f Space", "ㅏ "),
-        ("k f Clear x", "ㄱ"),
+        ("k f Clear x", "ㄱ")
     ]
 
     for example in examples {

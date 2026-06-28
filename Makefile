@@ -16,10 +16,11 @@ NU := nix develop --command -- nu
 ICON_NU := nix develop .\#icon-work --command -- nu
 BROWSER_NU := nix develop .\#browser-work --command -- nu
 SWIFT := nix develop --ignore-environment --command -- swift
+SWIFTLINT := nix develop .\#xcode-work --command -- swiftlint
 XCODEBUILD_ENV := env -u CC -u CXX -u LD -u SDKROOT -u NIX_CC -u NIX_CFLAGS_COMPILE -u NIX_CFLAGS_LINK -u NIX_LDFLAGS
 XCODEBUILD := $(XCODEBUILD_ENV) /usr/bin/xcodebuild
 
-.PHONY: all help build dmg install-debug uninstall clean icons check-toolchain version-check core-spec-check gui-smoke-test chrome-ime-repro
+.PHONY: all help build dmg install-debug uninstall clean icons check-toolchain version-check swiftlint core-spec-check gui-smoke-test chrome-ime-repro
 
 all: help
 
@@ -33,6 +34,7 @@ help:
 	@echo '    icons         -- render input method icon assets'
 	@echo '    check-toolchain -- print active Xcode toolchain information'
 	@echo '    version-check -- validate app/core version declaration ownership'
+	@echo '    swiftlint     -- lint Swift sources with SwiftLint'
 	@echo '    core-spec-check -- validate the Cole Sebeol core contract'
 	@echo '    gui-smoke-test -- run the Sublime Text GUI smoke test with hisle logs'
 	@echo '    chrome-ime-repro -- run the Chrome textarea IME reproduction tool'
@@ -44,6 +46,9 @@ check-toolchain:
 
 version-check:
 	$(NU) tools/check_versions.nu
+
+swiftlint:
+	$(SWIFTLINT) lint
 
 build:
 	$(XCODEBUILD) \

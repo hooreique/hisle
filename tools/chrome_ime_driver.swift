@@ -1,3 +1,6 @@
+// swiftlint:disable:next blanket_disable_command
+// swiftlint:disable file_length function_body_length cyclomatic_complexity
+
 import Cocoa
 import Foundation
 
@@ -6,7 +9,7 @@ private let chromeAlternateAppNames = ["Google Chrome for Testing", "Google Chro
 private let chromeBundleIDs = [
     "com.google.Chrome",
     "com.google.Chrome.forTesting",
-    "com.google.Chrome.canary",
+    "com.google.Chrome.canary"
 ]
 private let chromeWindowTitle = "hisle Chrome IME Repro"
 private let chromeLaunchTimeout: TimeInterval = 45.0
@@ -42,7 +45,7 @@ private func writeRuntimeIdentityLog(to outputURL: URL, since startDate: Date) {
         "show",
         "--style", "compact",
         "--start", logShowStartArgument(for: startDate),
-        "--predicate", "subsystem == \"hooreique.inputmethod.hisle\" && eventMessage CONTAINS \"controller runtime\"",
+        "--predicate", "subsystem == \"hooreique.inputmethod.hisle\" && eventMessage CONTAINS \"controller runtime\""
     ]
     process.standardOutput = pipe
     process.standardError = pipe
@@ -175,11 +178,11 @@ private struct ObserverReadyMetadata {
 
     private static func point(from value: Any?) -> CGPoint? {
         (value as? [String: Any]).flatMap { point -> CGPoint? in
-            guard let x = point["x"] as? Double,
-                  let y = point["y"] as? Double else {
+            guard let pointX = point["x"] as? Double,
+                  let pointY = point["y"] as? Double else {
                 return nil
             }
-            return CGPoint(x: x, y: y)
+            return CGPoint(x: pointX, y: pointY)
         }
     }
 }
@@ -239,7 +242,7 @@ private final class KeyEventLogger {
                 "key_code": Int(event.keyCode),
                 "phase": event.phase.rawValue,
                 "flags_raw_value": String(event.flags.rawValue),
-                "planned_delay_seconds": event.plannedDelay,
+                "planned_delay_seconds": event.plannedDelay
             ]
             let data = try JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
             handle.write(data)
@@ -369,24 +372,24 @@ private func typeDiagnosticSequence(
     for iteration in 1...iterations {
         print("Typing Chrome IME sequence iteration \(iteration)/\(iterations)")
         try verifyHisleCLIMode("roman", stage: "Iteration \(iteration) initial mode")
-        try tapKey(KeyCode.e, keyboard: keyboard, delays: delays)
+        try tapKey(KeyCode.repE, keyboard: keyboard, delays: delays)
         try tapModifier(KeyCode.rightShift, keyboard: keyboard, delays: delays, flag: .maskShift)
         try verifyHisleCLIMode("hangul", stage: "Iteration \(iteration) right Shift")
         try tapKey(KeyCode.backtick, keyboard: keyboard, delays: delays)
-        try tapKey(KeyCode.j, keyboard: keyboard, delays: delays)
-        try tapKey(KeyCode.g, keyboard: keyboard, delays: delays)
-        try tapKey(KeyCode.d, keyboard: keyboard, delays: delays)
+        try tapKey(KeyCode.repJ, keyboard: keyboard, delays: delays)
+        try tapKey(KeyCode.repG, keyboard: keyboard, delays: delays)
+        try tapKey(KeyCode.repD, keyboard: keyboard, delays: delays)
         try tapKey(KeyCode.escape, keyboard: keyboard, delays: delays)
         try verifyHisleCLIMode("roman", stage: "Iteration \(iteration) Escape")
-        try tapKey(KeyCode.e, keyboard: keyboard, delays: delays)
+        try tapKey(KeyCode.repE, keyboard: keyboard, delays: delays)
         try tapModifier(KeyCode.rightShift, keyboard: keyboard, delays: delays, flag: .maskShift)
         try verifyHisleCLIMode("hangul", stage: "Iteration \(iteration) second right Shift")
-        try tapKey(KeyCode.j, keyboard: keyboard, delays: delays)
-        try tapKey(KeyCode.t, keyboard: keyboard, delays: delays)
-        try tapKey(KeyCode.b, keyboard: keyboard, delays: delays)
+        try tapKey(KeyCode.repJ, keyboard: keyboard, delays: delays)
+        try tapKey(KeyCode.repT, keyboard: keyboard, delays: delays)
+        try tapKey(KeyCode.repB, keyboard: keyboard, delays: delays)
         try tapModifier(KeyCode.leftShift, keyboard: keyboard, delays: delays, flag: .maskShift)
         try verifyHisleCLIMode("roman", stage: "Iteration \(iteration) left Shift")
-        try tapKey(KeyCode.e, keyboard: keyboard, delays: delays)
+        try tapKey(KeyCode.repE, keyboard: keyboard, delays: delays)
     }
 }
 
@@ -400,7 +403,7 @@ private func typeClickDuringCompositionSequence(
     Thread.sleep(forTimeInterval: 0.2)
     try tapModifier(KeyCode.rightShift, keyboard: keyboard, delays: delays, flag: .maskShift)
     try verifyHisleCLIMode("hangul", stage: "Click scenario right Shift")
-    try tapKey(KeyCode.j, keyboard: keyboard, delays: delays)
+    try tapKey(KeyCode.repJ, keyboard: keyboard, delays: delays)
 
     let app = try focusChromeTestWindow(allowFocusClick: chromeScenario != "click-during-composition")
     if chromeScenario != "click-during-composition" {
@@ -408,11 +411,11 @@ private func typeClickDuringCompositionSequence(
     }
     Thread.sleep(forTimeInterval: 0.25)
 
-    try tapKey(KeyCode.g, keyboard: keyboard, delays: delays)
-    try tapKey(KeyCode.d, keyboard: keyboard, delays: delays)
+    try tapKey(KeyCode.repG, keyboard: keyboard, delays: delays)
+    try tapKey(KeyCode.repD, keyboard: keyboard, delays: delays)
     try tapModifier(KeyCode.leftShift, keyboard: keyboard, delays: delays, flag: .maskShift)
     try verifyHisleCLIMode("roman", stage: "Click scenario left Shift")
-    try tapKey(KeyCode.e, keyboard: keyboard, delays: delays)
+    try tapKey(KeyCode.repE, keyboard: keyboard, delays: delays)
 }
 
 private func typeIdleStressSequence(
@@ -428,14 +431,14 @@ private func typeIdleStressSequence(
     let idleDelay = TimeInterval(idleMilliseconds) / 1000.0
     for iteration in 1...iterations {
         print("Idle-stress iteration \(iteration)/\(iterations)")
-        try tapKey(KeyCode.j, keyboard: keyboard, delays: delays)
+        try tapKey(KeyCode.repJ, keyboard: keyboard, delays: delays)
         Thread.sleep(forTimeInterval: idleDelay)
-        try tapKey(KeyCode.g, keyboard: keyboard, delays: delays)
-        try tapKey(KeyCode.d, keyboard: keyboard, delays: delays)
+        try tapKey(KeyCode.repG, keyboard: keyboard, delays: delays)
+        try tapKey(KeyCode.repD, keyboard: keyboard, delays: delays)
         Thread.sleep(forTimeInterval: idleDelay)
-        try tapKey(KeyCode.j, keyboard: keyboard, delays: delays)
-        try tapKey(KeyCode.t, keyboard: keyboard, delays: delays)
-        try tapKey(KeyCode.b, keyboard: keyboard, delays: delays)
+        try tapKey(KeyCode.repJ, keyboard: keyboard, delays: delays)
+        try tapKey(KeyCode.repT, keyboard: keyboard, delays: delays)
+        try tapKey(KeyCode.repB, keyboard: keyboard, delays: delays)
 
         if iteration % 3 == 0 {
             try tapKey(KeyCode.space, keyboard: keyboard, delays: delays)
@@ -446,7 +449,7 @@ private func typeIdleStressSequence(
 
     try tapModifier(KeyCode.leftShift, keyboard: keyboard, delays: delays, flag: .maskShift)
     try verifyHisleCLIMode("roman", stage: "Idle stress left Shift")
-    try tapKey(KeyCode.e, keyboard: keyboard, delays: delays)
+    try tapKey(KeyCode.repE, keyboard: keyboard, delays: delays)
 }
 
 private func typeMidlineInsertSequence(
@@ -457,9 +460,9 @@ private func typeMidlineInsertSequence(
     try verifyHisleCLIMode("roman", stage: "Midline insert initial mode")
     try tapModifier(KeyCode.rightShift, keyboard: keyboard, delays: delays, flag: .maskShift)
     try verifyHisleCLIMode("hangul", stage: "Midline insert right Shift")
-    try tapKey(KeyCode.j, keyboard: keyboard, delays: delays)
-    try tapKey(KeyCode.g, keyboard: keyboard, delays: delays)
-    try tapKey(KeyCode.d, keyboard: keyboard, delays: delays)
+    try tapKey(KeyCode.repJ, keyboard: keyboard, delays: delays)
+    try tapKey(KeyCode.repG, keyboard: keyboard, delays: delays)
+    try tapKey(KeyCode.repD, keyboard: keyboard, delays: delays)
     try tapKey(KeyCode.escape, keyboard: keyboard, delays: delays)
     try verifyHisleCLIMode("roman", stage: "Midline insert Escape")
 }
@@ -472,9 +475,9 @@ private func typeTwoInsertMoveSequence(
     try verifyHisleCLIMode("roman", stage: "Two insert initial mode")
     try tapModifier(KeyCode.rightShift, keyboard: keyboard, delays: delays, flag: .maskShift)
     try verifyHisleCLIMode("hangul", stage: "Two insert first right Shift")
-    try tapKey(KeyCode.j, keyboard: keyboard, delays: delays)
-    try tapKey(KeyCode.g, keyboard: keyboard, delays: delays)
-    try tapKey(KeyCode.d, keyboard: keyboard, delays: delays)
+    try tapKey(KeyCode.repJ, keyboard: keyboard, delays: delays)
+    try tapKey(KeyCode.repG, keyboard: keyboard, delays: delays)
+    try tapKey(KeyCode.repD, keyboard: keyboard, delays: delays)
     try tapKey(KeyCode.escape, keyboard: keyboard, delays: delays)
     try verifyHisleCLIMode("roman", stage: "Two insert first Escape")
 
@@ -482,9 +485,9 @@ private func typeTwoInsertMoveSequence(
 
     try tapModifier(KeyCode.rightShift, keyboard: keyboard, delays: delays, flag: .maskShift)
     try verifyHisleCLIMode("hangul", stage: "Two insert second right Shift")
-    try tapKey(KeyCode.j, keyboard: keyboard, delays: delays)
-    try tapKey(KeyCode.g, keyboard: keyboard, delays: delays)
-    try tapKey(KeyCode.d, keyboard: keyboard, delays: delays)
+    try tapKey(KeyCode.repJ, keyboard: keyboard, delays: delays)
+    try tapKey(KeyCode.repG, keyboard: keyboard, delays: delays)
+    try tapKey(KeyCode.repD, keyboard: keyboard, delays: delays)
     try tapKey(KeyCode.escape, keyboard: keyboard, delays: delays)
     try verifyHisleCLIMode("roman", stage: "Two insert second Escape")
 }
@@ -497,10 +500,10 @@ private func typeActiveMoveContinueSequence(
     try verifyHisleCLIMode("roman", stage: "Active move initial mode")
     try tapModifier(KeyCode.rightShift, keyboard: keyboard, delays: delays, flag: .maskShift)
     try verifyHisleCLIMode("hangul", stage: "Active move right Shift")
-    try tapKey(KeyCode.j, keyboard: keyboard, delays: delays)
+    try tapKey(KeyCode.repJ, keyboard: keyboard, delays: delays)
     Thread.sleep(forTimeInterval: TimeInterval(idleMilliseconds) / 1000.0)
-    try tapKey(KeyCode.g, keyboard: keyboard, delays: delays)
-    try tapKey(KeyCode.d, keyboard: keyboard, delays: delays)
+    try tapKey(KeyCode.repG, keyboard: keyboard, delays: delays)
+    try tapKey(KeyCode.repD, keyboard: keyboard, delays: delays)
     try tapKey(KeyCode.escape, keyboard: keyboard, delays: delays)
     try verifyHisleCLIMode("roman", stage: "Active move Escape")
 }
@@ -514,13 +517,13 @@ private func typeClickMoveContinueSequence(
     try verifyHisleCLIMode("roman", stage: "Click move initial mode")
     try tapModifier(KeyCode.rightShift, keyboard: keyboard, delays: delays, flag: .maskShift)
     try verifyHisleCLIMode("hangul", stage: "Click move right Shift")
-    try tapKey(KeyCode.j, keyboard: keyboard, delays: delays)
+    try tapKey(KeyCode.repJ, keyboard: keyboard, delays: delays)
     Thread.sleep(forTimeInterval: TimeInterval(idleMilliseconds) / 1000.0)
     print("Clicking after first input screen point: \(clickPoint)")
     try clickScreenPoint(clickPoint, description: "Chrome click move caret")
     Thread.sleep(forTimeInterval: 0.2)
-    try tapKey(KeyCode.g, keyboard: keyboard, delays: delays)
-    try tapKey(KeyCode.d, keyboard: keyboard, delays: delays)
+    try tapKey(KeyCode.repG, keyboard: keyboard, delays: delays)
+    try tapKey(KeyCode.repD, keyboard: keyboard, delays: delays)
     try tapKey(KeyCode.escape, keyboard: keyboard, delays: delays)
     try verifyHisleCLIMode("roman", stage: "Click move Escape")
 }
@@ -541,7 +544,7 @@ private func typeDragSelectionInputSequence(
     )
     try tapModifier(KeyCode.rightShift, keyboard: keyboard, delays: delays, flag: .maskShift)
     try verifyHisleCLIMode("hangul", stage: "Drag selection input right Shift")
-    try tapKey(KeyCode.j, keyboard: keyboard, delays: delays)
+    try tapKey(KeyCode.repJ, keyboard: keyboard, delays: delays)
     Thread.sleep(forTimeInterval: TimeInterval(idleMilliseconds) / 1000.0)
 }
 
@@ -553,7 +556,7 @@ private func typeSelectedRangeInputSequence(
     try verifyHisleCLIMode("roman", stage: "Selected range input initial mode")
     try tapModifier(KeyCode.rightShift, keyboard: keyboard, delays: delays, flag: .maskShift)
     try verifyHisleCLIMode("hangul", stage: "Selected range input right Shift")
-    try tapKey(KeyCode.j, keyboard: keyboard, delays: delays)
+    try tapKey(KeyCode.repJ, keyboard: keyboard, delays: delays)
     Thread.sleep(forTimeInterval: TimeInterval(idleMilliseconds) / 1000.0)
 }
 
@@ -569,7 +572,7 @@ private func typeSelectedRangeNumbersSequence(
     for keyCode in [
         KeyCode.one,
         KeyCode.two,
-        KeyCode.three,
+        KeyCode.three
     ] {
         try tapKey(keyCode, keyboard: keyboard, delays: delays)
     }
@@ -588,11 +591,11 @@ private func typeSelectedRangeAnnyeonghaseyoSequence(
     try verifyHisleCLIMode("hangul", stage: "\(scenarioName) right Shift")
 
     for keyCode in [
-        KeyCode.j, KeyCode.f, KeyCode.s,
-        KeyCode.h, KeyCode.e, KeyCode.a,
-        KeyCode.m, KeyCode.f,
-        KeyCode.n, KeyCode.c,
-        KeyCode.j, KeyCode.four,
+        KeyCode.repJ, KeyCode.repF, KeyCode.repS,
+        KeyCode.repH, KeyCode.repE, KeyCode.repA,
+        KeyCode.repM, KeyCode.repF,
+        KeyCode.repN, KeyCode.repC,
+        KeyCode.repJ, KeyCode.four
     ] {
         try tapKey(keyCode, keyboard: keyboard, delays: delays)
     }
@@ -614,11 +617,11 @@ private func typeDoubleClickSelectionAnnyeonghaseyoSequence(
     try verifyHisleCLIMode("hangul", stage: "Double click selection right Shift")
 
     for keyCode in [
-        KeyCode.j, KeyCode.f, KeyCode.s,
-        KeyCode.h, KeyCode.e, KeyCode.a,
-        KeyCode.m, KeyCode.f,
-        KeyCode.n, KeyCode.c,
-        KeyCode.j, KeyCode.four,
+        KeyCode.repJ, KeyCode.repF, KeyCode.repS,
+        KeyCode.repH, KeyCode.repE, KeyCode.repA,
+        KeyCode.repM, KeyCode.repF,
+        KeyCode.repN, KeyCode.repC,
+        KeyCode.repJ, KeyCode.four
     ] {
         try tapKey(keyCode, keyboard: keyboard, delays: delays)
     }
@@ -650,7 +653,7 @@ private func runChromeDriver() throws {
             "delay_max_milliseconds": delayMaxMilliseconds,
             "idle_milliseconds": idleMilliseconds,
             "click_initial_caret": clickInitialCaret,
-            "skip_focus_click": skipFocusClick,
+            "skip_focus_click": skipFocusClick
         ],
         to: driverStateURL
     )
@@ -695,7 +698,10 @@ private func runChromeDriver() throws {
         }
 
         guard let point else {
-            throw GuiTestFailure.message("HISLE_CHROME_CLICK_INITIAL_CARET is set, but observer-ready.json has no initial caret screen point.")
+            throw GuiTestFailure.message(
+                "HISLE_CHROME_CLICK_INITIAL_CARET is set, but observer-ready.json has " +
+                    "no initial caret screen point."
+            )
         }
         let adjustedPoint = adjustedClickPoint(point)
         print("Clicking initial caret screen point: \(adjustedPoint)")
@@ -776,7 +782,9 @@ private func runChromeDriver() throws {
             focusedApp: focusedApp
         )
         guard let point else {
-            throw GuiTestFailure.message("HISLE_CHROME_INITIAL_CARET is required for double-click-selection-annyeonghaseyo.")
+            throw GuiTestFailure.message(
+                "HISLE_CHROME_INITIAL_CARET is required for double-click-selection-annyeonghaseyo."
+            )
         }
         try typeDoubleClickSelectionAnnyeonghaseyoSequence(
             keyboard: keyboard,
@@ -791,7 +799,10 @@ private func runChromeDriver() throws {
         to: options.runDirectory.appendingPathComponent("runtime-identity.log"),
         since: runtimeIdentityLogStartDate
     )
-    print("Chrome IME HID sequence completed. Target: \(chromeTargetKind). Scenario: \(chromeScenario). Expected final value: \(String(reflecting: expectedText))")
+    print(
+        "Chrome IME HID sequence completed. Target: \(chromeTargetKind). " +
+            "Scenario: \(chromeScenario). Expected final value: \(String(reflecting: expectedText))"
+    )
 }
 
 @main
