@@ -96,10 +96,12 @@ Known non-issues:
   `nix develop --command -- make gui-smoke-test` once before treating it as a
   regression.
 - Xcode may print CoreSimulator version warnings while building this macOS input
-  method target. Treat them as noise unless the build fails.
+  method target. Treat them as noise unless the build fails; see
+  `docs/toolchains.md#known-xcode-warnings`.
 - Xcode may print AppIntents metadata extraction warnings such as skipped
   metadata or no AppIntents dependency found. Treat them as noise unless the
-  build fails.
+  build fails; see `docs/toolchains.md#known-xcode-warnings` before changing
+  build settings or linking frameworks.
 
 ## Chrome IME Reproduction
 

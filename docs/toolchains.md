@@ -85,6 +85,64 @@ shells as separate commands.
 Local app builds are written under `build/` with `SYMROOT`, not Xcode's default
 DerivedData location.
 
+## Known Xcode Warnings
+
+Xcode-oriented targets may print warnings that are not `hisle` behavior
+regressions. Treat these as known toolchain noise unless the build fails or the
+warning text changes materially.
+
+CoreSimulator version warnings can appear while building this macOS input method
+target. The stale-service form includes messages such as:
+
+```text
+DVTErrorPresenter: Unable to load simulator devices.
+CoreSimulator is out of date.
+Simulator device support disabled.
+```
+
+This is usually local Xcode/CoreSimulator service state, not a `hisle` build
+setting. If Xcode reports stale or out-of-date CoreSimulator services, first
+run:
+
+```sh
+nix develop --command -- xcrun simctl list devices
+```
+
+Let the command finish even if it prints platform-key warnings. It may repair a
+stale CoreSimulator service, then print `== Devices ==`. Rebuild after that
+before treating the warning as a project issue. If the same out-of-date
+CoreSimulator warning remains after this command, investigate the local
+macOS/Xcode installation before changing project build settings.
+
+Xcode 26.6 runs `ExtractAppIntentsMetadata` for Swift targets even though
+`hisle` does not define App Intents and does not need Siri, Shortcuts,
+Spotlight, widget, control, or Apple Intelligence actions. The warning commonly
+looks like:
+
+```text
+Metadata extraction skipped. No AppIntents.framework dependency found.
+```
+
+Do not link `AppIntents.framework` only to silence this warning. That would add
+an unused framework dependency to satisfy a build tool check, not to support an
+actual product feature.
+
+Dependency-free warning-removal attempts checked on 2026-06-28 with Xcode 26.6
+did not produce a clean supported fix:
+
+- `ENABLE_APP_INTENTS_METADATA_GENERATION=NO` and
+  `ENABLE_APPINTENTS_METADATA_GENERATION=NO` did not stop metadata extraction.
+- `LM_FILTER_WARNINGS=YES` passed `--quiet-warnings`, but the framework warning
+  still printed.
+- `LM_ENABLE_LINK_GENERATION=NO` passed `-d`, but replaced the warning with
+  `Metadata extraction disabled by --disable`.
+- `LM_COMPILE_TIME_EXTRACTION=NO` left the app target warning in place.
+- `SWIFT_ENABLE_EMIT_CONST_VALUES=NO` added another metadata warning.
+- Empty `SWIFT_EMIT_CONST_VALUE_PROTOCOLS` failed the build.
+- The older `OTHER_SWIFT_FLAGS` workaround with
+  `-Xfrontend -disable-autolink-framework -Xfrontend AppIntents` did not remove
+  the warning in this Xcode version.
+
 ## Nix Shells
 
 Each dev shell appends `/usr/bin:/bin` after the Nix paths so macOS system
