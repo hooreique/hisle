@@ -1,5 +1,6 @@
 import { chromium } from 'playwright-core';
 import http from 'node:http';
+import { Buffer } from 'node:buffer';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
@@ -7,34 +8,52 @@ import process from 'node:process';
 const runDir = requiredEnv('RUN_DIR');
 const runId = process.env.RUN_ID ?? path.basename(runDir);
 const observerPort = Number(process.env.OBSERVER_PORT ?? '0');
-const remoteDebuggingPort = process.env.CHROME_REMOTE_DEBUGGING_PORT ?? '';
-const chromePath = process.env.CHROME_PATH ?? '';
+const browserKind = normalizeBrowserKind(process.env.HISLE_BROWSER_KIND ?? 'chrome');
+const browserDisplayName = browserKind === 'firefox' ? 'Firefox' : 'Chrome';
+const browserEnvPrefix = browserKind === 'firefox' ? 'HISLE_FIREFOX' : 'HISLE_CHROME';
+const browserPageTitle = `hisle ${browserDisplayName} IME Repro`;
+const remoteDebuggingPort = browserKind === 'chrome' ? envValue(['CHROME_REMOTE_DEBUGGING_PORT']) : '';
+const browserPath = browserKind === 'firefox'
+  ? envValue(['FIREFOX_PATH', 'HISLE_FIREFOX_PATH'])
+  : envValue(['CHROME_PATH']);
 const iterations = Number(process.env.ITERATIONS ?? '1');
-const targetKind = process.env.HISLE_CHROME_TARGET ?? 'textarea';
-const initialText = process.env.HISLE_CHROME_INITIAL_TEXT ?? '';
-const initialCaretText = process.env.HISLE_CHROME_INITIAL_CARET ?? '';
-const initialSelectionText = process.env.HISLE_CHROME_INITIAL_SELECTION ?? '';
-const initialDoubleClick = process.env.HISLE_CHROME_INITIAL_DOUBLE_CLICK === '1';
-const initialRender = nonEmptyEnv('HISLE_CHROME_INITIAL_RENDER', 'text');
-const moveAfterCompositionCaretText = process.env.HISLE_CHROME_MOVE_AFTER_COMPOSITION_CARET ?? '';
-const moveAfterInputCaretText = process.env.HISLE_CHROME_MOVE_AFTER_INPUT_CARET ?? '';
-const clickAfterInputCaretText = process.env.HISLE_CHROME_CLICK_AFTER_INPUT_CARET ?? '';
-const dragSelectionText = process.env.HISLE_CHROME_DRAG_SELECTION ?? '';
-const forceRenderOnCompositionEnd = process.env.HISLE_CHROME_FORCE_RENDER_ON_COMPOSITION_END === '1';
-const editorChaos = process.env.HISLE_CHROME_EDITOR_CHAOS ?? '';
-const chaosDelayMilliseconds = numberFromEnv('HISLE_CHROME_CHAOS_DELAY_MS', 650);
-const keepOpen = process.env.HISLE_CHROME_KEEP_OPEN === '1';
-const traceEnabled = process.env.HISLE_CHROME_TRACE !== '0';
-const allowMismatch = process.env.HISLE_CHROME_ALLOW_MISMATCH === '1';
+const targetKind = envValue([`${browserEnvPrefix}_TARGET`, 'HISLE_CHROME_TARGET'], 'textarea');
+const initialText = envValue([`${browserEnvPrefix}_INITIAL_TEXT`, 'HISLE_CHROME_INITIAL_TEXT']);
+const initialCaretText = envValue([`${browserEnvPrefix}_INITIAL_CARET`, 'HISLE_CHROME_INITIAL_CARET']);
+const initialSelectionText = envValue([`${browserEnvPrefix}_INITIAL_SELECTION`, 'HISLE_CHROME_INITIAL_SELECTION']);
+const initialDoubleClick = envValue([`${browserEnvPrefix}_INITIAL_DOUBLE_CLICK`, 'HISLE_CHROME_INITIAL_DOUBLE_CLICK']) === '1';
+const initialRender = envValue([`${browserEnvPrefix}_INITIAL_RENDER`, 'HISLE_CHROME_INITIAL_RENDER'], 'text');
+const moveAfterCompositionCaretText = envValue([
+  `${browserEnvPrefix}_MOVE_AFTER_COMPOSITION_CARET`,
+  'HISLE_CHROME_MOVE_AFTER_COMPOSITION_CARET',
+]);
+const moveAfterInputCaretText = envValue([
+  `${browserEnvPrefix}_MOVE_AFTER_INPUT_CARET`,
+  'HISLE_CHROME_MOVE_AFTER_INPUT_CARET',
+]);
+const clickAfterInputCaretText = envValue([
+  `${browserEnvPrefix}_CLICK_AFTER_INPUT_CARET`,
+  'HISLE_CHROME_CLICK_AFTER_INPUT_CARET',
+]);
+const dragSelectionText = envValue([`${browserEnvPrefix}_DRAG_SELECTION`, 'HISLE_CHROME_DRAG_SELECTION']);
+const forceRenderOnCompositionEnd = envValue([
+  `${browserEnvPrefix}_FORCE_RENDER_ON_COMPOSITION_END`,
+  'HISLE_CHROME_FORCE_RENDER_ON_COMPOSITION_END',
+]) === '1';
+const editorChaos = envValue([`${browserEnvPrefix}_EDITOR_CHAOS`, 'HISLE_CHROME_EDITOR_CHAOS']);
+const chaosDelayMilliseconds = numberFromEnv([`${browserEnvPrefix}_CHAOS_DELAY_MS`, 'HISLE_CHROME_CHAOS_DELAY_MS'], 650);
+const keepOpen = envValue([`${browserEnvPrefix}_KEEP_OPEN`, 'HISLE_CHROME_KEEP_OPEN']) === '1';
+const traceEnabled = envValue([`${browserEnvPrefix}_TRACE`, 'HISLE_CHROME_TRACE'], '1') !== '0';
+const allowMismatch = envValue([`${browserEnvPrefix}_ALLOW_MISMATCH`, 'HISLE_CHROME_ALLOW_MISMATCH']) === '1';
 const expectedUnit = 'f`\u{C758}f\u{C5B4}\u{315C}f';
 const expectedValue = process.env.EXPECTED_VALUE && process.env.EXPECTED_VALUE.length > 0
   ? process.env.EXPECTED_VALUE
   : expectedUnit.repeat(iterations);
 const readyFile = path.join(runDir, 'observer-ready.json');
 const pidFile = path.join(runDir, 'observer.pid');
-const userDataDir = path.join(runDir, 'chrome-profile');
+const userDataDir = path.join(runDir, `${browserKind}-profile`);
 
-let context;
+let browserSession;
 let page;
 let server;
 let finalized = false;
@@ -44,13 +63,13 @@ await fs.writeFile(pidFile, `${process.pid}\n`, 'utf8');
 
 try {
   if (!['textarea', 'contenteditable', 'wysiwyg'].includes(targetKind)) {
-    throw new Error(`Unsupported HISLE_CHROME_TARGET: ${targetKind}`);
+    throw new Error(`Unsupported ${browserEnvPrefix}_TARGET: ${targetKind}`);
   }
   if (!['text', 'spans', 'paragraphs'].includes(initialRender)) {
-    throw new Error(`Unsupported HISLE_CHROME_INITIAL_RENDER: ${initialRender}`);
+    throw new Error(`Unsupported ${browserEnvPrefix}_INITIAL_RENDER: ${initialRender}`);
   }
   if (!['', 'idle-normalize', 'focus-pulse', 'active-rerender', 'active-rerender-focus-pulse', 'restore-initial-selection'].includes(editorChaos)) {
-    throw new Error(`Unsupported HISLE_CHROME_EDITOR_CHAOS: ${editorChaos}`);
+    throw new Error(`Unsupported ${browserEnvPrefix}_EDITOR_CHAOS: ${editorChaos}`);
   }
   await startBrowser();
   await startServer();
@@ -80,13 +99,27 @@ function requiredEnv(name) {
   return value;
 }
 
-function nonEmptyEnv(name, fallback) {
-  const value = process.env[name];
-  return value && value.length > 0 ? value : fallback;
+function normalizeBrowserKind(value) {
+  if (value === 'chrome' || value === 'firefox') {
+    return value;
+  }
+
+  throw new Error(`Unsupported HISLE_BROWSER_KIND: ${value}`);
 }
 
-function numberFromEnv(name, fallback) {
-  const text = process.env[name];
+function envValue(names, fallback = '') {
+  for (const name of names) {
+    const value = process.env[name];
+    if (value && value.length > 0) {
+      return value;
+    }
+  }
+
+  return fallback;
+}
+
+function numberFromEnv(names, fallback) {
+  const text = envValue(names);
   if (!text) {
     return fallback;
   }
@@ -95,6 +128,14 @@ function numberFromEnv(name, fallback) {
 }
 
 async function startBrowser() {
+  if (browserKind === 'firefox') {
+    await startFirefoxBrowser();
+  } else {
+    await startChromiumBrowser();
+  }
+}
+
+async function startChromiumBrowser() {
   const launchOptions = {
     headless: false,
     chromiumSandbox: true,
@@ -106,8 +147,8 @@ async function startBrowser() {
     ],
   };
 
-  if (chromePath) {
-    launchOptions.executablePath = chromePath;
+  if (browserPath) {
+    launchOptions.executablePath = browserPath;
   } else {
     launchOptions.channel = 'chrome';
   }
@@ -116,15 +157,108 @@ async function startBrowser() {
     launchOptions.args.push(`--remote-debugging-port=${remoteDebuggingPort}`);
   }
 
-  context = await chromium.launchPersistentContext(userDataDir, launchOptions);
+  const context = await chromium.launchPersistentContext(userDataDir, launchOptions);
 
   if (traceEnabled) {
     await context.tracing.start({ screenshots: true, snapshots: true, sources: false });
   }
 
-  page = context.pages()[0] ?? await context.newPage();
-  await page.setViewportSize({ width: 1200, height: 800 });
+  const playwrightPage = context.pages()[0] ?? await context.newPage();
+  await playwrightPage.setViewportSize({ width: 1200, height: 800 });
+  page = playwrightPage;
+  browserSession = {
+    version: () => context.browser()?.version() ?? null,
+    stopTracing: async (tracePath) => {
+      if (traceEnabled) {
+        await context.tracing.stop({ path: tracePath });
+      }
+    },
+    close: () => context.close(),
+  };
   await installTestPage(page);
+}
+
+async function startFirefoxBrowser() {
+  const webdriver = await import('selenium-webdriver');
+  const firefox = await import('selenium-webdriver/firefox.js');
+  const options = new firefox.Options()
+    .setPreference('browser.shell.checkDefaultBrowser', false)
+    .setPreference('browser.startup.page', 0);
+
+  if (browserPath) {
+    options.setBinary(browserPath);
+  }
+
+  const geckodriverPath = envValue(['GECKODRIVER_PATH']);
+  const service = new firefox.ServiceBuilder(geckodriverPath || undefined);
+
+  const driver = await new webdriver.Builder()
+    .forBrowser('firefox')
+    .setFirefoxOptions(options)
+    .setFirefoxService(service)
+    .build();
+
+  await driver.manage().window().setRect({ width: 1200, height: 800, x: 80, y: 80 });
+  const capabilities = await driver.getCapabilities();
+  const version = capabilities.get('browserVersion') ?? null;
+
+  page = seleniumPageAdapter(driver);
+  browserSession = {
+    version: () => version,
+    close: () => driver.quit(),
+  };
+  await installTestPage(page);
+}
+
+function seleniumPageAdapter(driver) {
+  const scriptFromFunction = (fn, invocation = 'apply(null, arguments)') => (
+    `return (${fn.toString()}).${invocation};`
+  );
+
+  return {
+    mouse: {
+      dblclick: async (x, y) => {
+        await driver.actions({ async: true })
+          .move({ x: Math.round(x), y: Math.round(y), origin: 'viewport' })
+          .doubleClick()
+          .perform();
+      },
+    },
+    setContent: async (html) => {
+      const dataURL = `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
+      await driver.get(dataURL);
+    },
+    evaluate: async (fn, arg) => {
+      const script = scriptFromFunction(fn);
+      return driver.executeScript(script, arg);
+    },
+    waitForFunction: async (fn, options = {}) => {
+      const timeout = options.timeout ?? 30000;
+      const deadline = Date.now() + timeout;
+      const script = scriptFromFunction(fn, 'call(null)');
+      while (Date.now() < deadline) {
+        if (await driver.executeScript(script)) {
+          return;
+        }
+        await delay(100);
+      }
+      throw new Error(`Timed out waiting for Firefox page function after ${timeout}ms.`);
+    },
+    waitForTimeout: delay,
+    bringToFront: async () => {
+      await driver.executeScript('window.focus();');
+    },
+    screenshot: async ({ path: screenshotPath }) => {
+      const data = await driver.takeScreenshot();
+      await fs.writeFile(screenshotPath, Buffer.from(data, 'base64'));
+    },
+  };
+}
+
+function delay(milliseconds) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, milliseconds);
+  });
 }
 
 async function installTestPage(targetPage) {
@@ -132,13 +266,13 @@ async function installTestPage(targetPage) {
   const isWysiwyg = targetKind === 'wysiwyg';
   const targetMarkup = isTextarea
     ? '<textarea id="target" class="input-surface" autofocus spellcheck="false" autocapitalize="off" autocomplete="off"></textarea>'
-    : `<div id="target" class="input-surface editable${isWysiwyg ? ' wysiwyg' : ''}" contenteditable="true" role="textbox" aria-label="hisle Chrome IME Repro" spellcheck="false" autocapitalize="off" autocomplete="off"></div>`;
+    : `<div id="target" class="input-surface editable${isWysiwyg ? ' wysiwyg' : ''}" contenteditable="true" role="textbox" aria-label="${browserPageTitle}" spellcheck="false" autocapitalize="off" autocomplete="off"></div>`;
 
   await targetPage.setContent(`<!doctype html>
 <html>
 <head>
   <meta charset="utf-8">
-  <title>hisle Chrome IME Repro</title>
+  <title>${browserPageTitle}</title>
   <style>
     html,
     body {
@@ -207,7 +341,7 @@ async function installTestPage(targetPage) {
 </head>
 <body>
   <main>
-    <h1>hisle Chrome IME Repro - ${targetKind}</h1>
+    <h1>${browserPageTitle} - ${targetKind}</h1>
     ${targetMarkup}
   </main>
 </body>
@@ -304,13 +438,13 @@ async function installTestPage(targetPage) {
 
       const parts = text.split(':');
       if (parts.length !== 2) {
-        throw new Error(`HISLE_CHROME_DRAG_SELECTION must use start:end syntax, got ${text}`);
+        throw new Error(`${browserEnvPrefix}_DRAG_SELECTION must use start:end syntax, got ${text}`);
       }
 
       const start = Number(parts[0]);
       const end = Number(parts[1]);
       if (!Number.isFinite(start) || !Number.isFinite(end)) {
-        throw new Error(`HISLE_CHROME_DRAG_SELECTION offsets must be finite numbers, got ${text}`);
+        throw new Error(`${browserEnvPrefix}_DRAG_SELECTION offsets must be finite numbers, got ${text}`);
       }
 
       return { start, end };
@@ -828,7 +962,7 @@ async function installTestPage(targetPage) {
   if (initialDoubleClick) {
     const point = await targetPage.evaluate(() => window.__hisleInitialState?.caret_client_point ?? null);
     if (!point) {
-      throw new Error('HISLE_CHROME_INITIAL_DOUBLE_CLICK requires a resolvable initial caret point.');
+      throw new Error(`${browserEnvPrefix}_INITIAL_DOUBLE_CLICK requires a resolvable initial caret point.`);
     }
 
     await targetPage.mouse.dblclick(point.x, point.y);
@@ -942,16 +1076,21 @@ async function startServer() {
 }
 
 async function writeReadyFile() {
-  const browser = context.browser();
   const initialState = page ? await page.evaluate(() => window.__hisleInitialState ?? null) : null;
+  const browserVersion = browserSession?.version() ?? null;
   const ready = {
     ok: true,
     run_id: runId,
     run_directory: runDir,
     observer_port: server.address().port,
     ready_wall_clock_timestamp: new Date().toISOString(),
-    chrome_path: chromePath || null,
-    chrome_version: browser ? browser.version() : null,
+    browser_kind: browserKind,
+    browser_path: browserPath || null,
+    browser_version: browserVersion,
+    chrome_path: browserKind === 'chrome' ? browserPath || null : null,
+    chrome_version: browserKind === 'chrome' ? browserVersion : null,
+    firefox_path: browserKind === 'firefox' ? browserPath || null : null,
+    firefox_version: browserKind === 'firefox' ? browserVersion : null,
     remote_debugging_port: remoteDebuggingPort || null,
     target_kind: targetKind,
     initial_text: initialText,
@@ -1094,12 +1233,12 @@ async function finalize({ reason, driverExitCode }) {
     await page.screenshot({ path: path.join(runDir, 'screenshot.png'), fullPage: true });
   }
 
-  if (traceEnabled && context) {
-    await context.tracing.stop({ path: path.join(runDir, 'trace.zip') });
+  if (browserSession?.stopTracing) {
+    await browserSession.stopTracing(path.join(runDir, 'trace.zip'));
   }
 
-  if (!keepOpen && context) {
-    await context.close();
+  if (!keepOpen && browserSession) {
+    await browserSession.close();
   }
 
   const ok = driverExitCode === 0 && finalState.matches_expected_value === true;

@@ -1,5 +1,5 @@
 {
-  "name": "hisle-chrome-ime",
+  "name": "hisle-browser-ime",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -7,6 +7,7 @@
     "observer": "node observer.mjs"
   },
   "dependencies": {
-    "playwright-core": "^1.54.0"
+    "playwright-core": "^1.54.0",
+    "selenium-webdriver": "^4.45.0"
   }
 }

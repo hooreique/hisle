@@ -244,6 +244,46 @@ Triage guide:
   Chrome/macOS/browser interaction.
 - Good DOM events followed by later value mutation points at page JavaScript.
 
+## Firefox IME Reproduction
+
+Use this as the Firefox counterpart to the local Chrome IME fixture. It launches
+real Firefox through Selenium and geckodriver, observes DOM events from the same
+`<textarea>`, `contenteditable`, and WYSIWYG fixture, and still sends all typing
+through the Swift HID driver and the real macOS input method path.
+
+Preferred command:
+
+```sh
+nix develop .#browser --command -- make firefox-ime-repro
+```
+
+To run only the repro after a debug install:
+
+```sh
+nix develop .#browser --command -- nu tools/firefox_ime_repro.nu
+```
+
+Firefox does not use the Chrome DevTools Protocol attach path from the Chrome
+fixture. The local fixture starts a WebDriver-controlled Firefox session through
+geckodriver instead, so `CHROME_REMOTE_DEBUGGING_PORT` and Chrome reuse options
+do not apply. The browser shell provides geckodriver, and the script defaults to
+`/Applications/Firefox.app/Contents/MacOS/firefox` when `FIREFOX_PATH` and
+`HISLE_FIREFOX_PATH` are unset.
+
+Useful environment options mirror the Chrome fixture. Prefer the
+`HISLE_FIREFOX_*` names for Firefox-specific runs, such as
+`HISLE_FIREFOX_TARGET`, `HISLE_FIREFOX_SCENARIO`,
+`HISLE_FIREFOX_INITIAL_TEXT`, `HISLE_FIREFOX_INITIAL_SELECTION`,
+`HISLE_FIREFOX_EDITOR_CHAOS`, `HISLE_FIREFOX_ALLOW_MISMATCH`, and
+`HISLE_FIREFOX_KEEP_OPEN`. Existing `HISLE_CHROME_*` names remain accepted as a
+fallback for the shared local fixture options.
+
+Artifacts are written under `build/firefox-ime/<run-id>/` and match the Chrome
+fixture where possible: `keys.jsonl`, `dom-events.jsonl`,
+`editor-chaos.jsonl`, `ime.log`, `runtime-identity.log`, `driver-state.json`,
+`final-state.json`, `screenshot.png`, and `environment.json`. Selenium does not
+produce Playwright `trace.zip` artifacts.
+
 ## Atlassian Confluence Live Reproduction
 
 Use this when the behavior must be checked against a real Confluence Cloud page

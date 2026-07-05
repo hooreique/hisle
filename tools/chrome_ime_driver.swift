@@ -4,26 +4,82 @@
 import Cocoa
 import Foundation
 
-private let chromeAppName = "Google Chrome"
-private let chromeAlternateAppNames = ["Google Chrome for Testing", "Google Chrome Canary"]
-private let chromeBundleIDs = [
+private func environmentValue(_ names: [String], defaultValue: String = "") -> String {
+    for name in names {
+        if let value = ProcessInfo.processInfo.environment[name], !value.isEmpty {
+            return value
+        }
+    }
+    return defaultValue
+}
+
+private func normalizeBrowserKind(_ value: String) -> String {
+    value == "firefox" ? "firefox" : "chrome"
+}
+
+private let browserKind = normalizeBrowserKind(
+    ProcessInfo.processInfo.environment["HISLE_BROWSER_KIND"] ?? "chrome"
+)
+private let browserName = browserKind == "firefox" ? "Firefox" : "Chrome"
+private let browserEnvPrefix = browserKind == "firefox" ? "HISLE_FIREFOX" : "HISLE_CHROME"
+private let browserAppName = environmentValue(
+    ["HISLE_BROWSER_APP_NAME"],
+    defaultValue: browserKind == "firefox" ? "Firefox" : "Google Chrome"
+)
+private let browserAlternateAppNames: [String] = browserKind == "firefox" ? [] : [
+    "Google Chrome for Testing",
+    "Google Chrome Canary"
+]
+private let browserBundleIDs: [String] = browserKind == "firefox" ? [
+    "org.mozilla.firefox"
+] : [
     "com.google.Chrome",
     "com.google.Chrome.forTesting",
     "com.google.Chrome.canary"
 ]
-private let chromeWindowTitle = "hisle Chrome IME Repro"
-private let chromeLaunchTimeout: TimeInterval = 45.0
-private let chromeFocusTimeout: TimeInterval = 20.0
+private let browserWindowTitle = "hisle \(browserName) IME Repro"
+private let browserLaunchTimeout: TimeInterval = 45.0
+private let browserFocusTimeout: TimeInterval = 20.0
 private let expectedUnitText = "f`\u{C758}f\u{C5B4}\u{315C}f"
-private let chromeTargetKind = ProcessInfo.processInfo.environment["HISLE_CHROME_TARGET"] ?? "textarea"
-private let chromeScenario = ProcessInfo.processInfo.environment["HISLE_CHROME_SCENARIO"] ?? "standard"
-private let delayMinMilliseconds = environmentInteger("HISLE_CHROME_DELAY_MIN_MS", defaultValue: 55, minimum: 0)
-private let delayMaxMilliseconds = environmentInteger("HISLE_CHROME_DELAY_MAX_MS", defaultValue: 100, minimum: 0)
-private let idleMilliseconds = environmentInteger("HISLE_CHROME_IDLE_MS", defaultValue: 900, minimum: 0)
-private let skipFocusClick = ProcessInfo.processInfo.environment["HISLE_CHROME_SKIP_FOCUS_CLICK"] == "1"
-private let clickInitialCaret = ProcessInfo.processInfo.environment["HISLE_CHROME_CLICK_INITIAL_CARET"] == "1"
-private let clickScreenDX = environmentDouble("HISLE_CHROME_CLICK_SCREEN_DX", defaultValue: 0)
-private let clickScreenDY = environmentDouble("HISLE_CHROME_CLICK_SCREEN_DY", defaultValue: 0)
+private let browserTargetKind = environmentValue(
+    ["\(browserEnvPrefix)_TARGET", "HISLE_CHROME_TARGET"],
+    defaultValue: "textarea"
+)
+private let browserScenario = environmentValue(
+    ["\(browserEnvPrefix)_SCENARIO", "HISLE_CHROME_SCENARIO"],
+    defaultValue: "standard"
+)
+private let delayMinMilliseconds = environmentInteger(
+    ["\(browserEnvPrefix)_DELAY_MIN_MS", "HISLE_CHROME_DELAY_MIN_MS"],
+    defaultValue: 55,
+    minimum: 0
+)
+private let delayMaxMilliseconds = environmentInteger(
+    ["\(browserEnvPrefix)_DELAY_MAX_MS", "HISLE_CHROME_DELAY_MAX_MS"],
+    defaultValue: 100,
+    minimum: 0
+)
+private let idleMilliseconds = environmentInteger(
+    ["\(browserEnvPrefix)_IDLE_MS", "HISLE_CHROME_IDLE_MS"],
+    defaultValue: 900,
+    minimum: 0
+)
+private let skipFocusClick = environmentValue([
+    "\(browserEnvPrefix)_SKIP_FOCUS_CLICK",
+    "HISLE_CHROME_SKIP_FOCUS_CLICK"
+]) == "1"
+private let clickInitialCaret = environmentValue([
+    "\(browserEnvPrefix)_CLICK_INITIAL_CARET",
+    "HISLE_CHROME_CLICK_INITIAL_CARET"
+]) == "1"
+private let clickScreenDX = environmentDouble(
+    ["\(browserEnvPrefix)_CLICK_SCREEN_DX", "HISLE_CHROME_CLICK_SCREEN_DX"],
+    defaultValue: 0
+)
+private let clickScreenDY = environmentDouble(
+    ["\(browserEnvPrefix)_CLICK_SCREEN_DY", "HISLE_CHROME_CLICK_SCREEN_DY"],
+    defaultValue: 0
+)
 private let expectedValueOverride = ProcessInfo.processInfo.environment["EXPECTED_VALUE"].flatMap {
     $0.isEmpty ? nil : $0
 }
@@ -61,9 +117,9 @@ private func writeRuntimeIdentityLog(to outputURL: URL, since startDate: Date) {
     }
 }
 
-private func environmentInteger(_ name: String, defaultValue: Int, minimum: Int) -> Int {
-    guard let text = ProcessInfo.processInfo.environment[name],
-          !text.isEmpty,
+private func environmentInteger(_ names: [String], defaultValue: Int, minimum: Int) -> Int {
+    let text = environmentValue(names)
+    guard !text.isEmpty,
           let value = Int(text)
     else {
         return defaultValue
@@ -71,9 +127,9 @@ private func environmentInteger(_ name: String, defaultValue: Int, minimum: Int)
     return max(minimum, value)
 }
 
-private func environmentDouble(_ name: String, defaultValue: Double) -> Double {
-    guard let text = ProcessInfo.processInfo.environment[name],
-          !text.isEmpty,
+private func environmentDouble(_ names: [String], defaultValue: Double) -> Double {
+    let text = environmentValue(names)
+    guard !text.isEmpty,
           let value = Double(text)
     else {
         return defaultValue
@@ -271,16 +327,16 @@ private func writeJSONObject(_ value: [String: Any], to url: URL) throws {
 private func runningChromeApplications() -> [NSRunningApplication] {
     var appsByProcessID = [pid_t: NSRunningApplication]()
 
-    for bundleID in chromeBundleIDs {
+    for bundleID in browserBundleIDs {
         for app in NSRunningApplication.runningApplications(withBundleIdentifier: bundleID) {
             appsByProcessID[app.processIdentifier] = app
         }
     }
 
-    for app in NSWorkspace.shared.runningApplications where app.localizedName == chromeAppName {
+    for app in NSWorkspace.shared.runningApplications where app.localizedName == browserAppName {
         appsByProcessID[app.processIdentifier] = app
     }
-    for name in chromeAlternateAppNames {
+    for name in browserAlternateAppNames {
         for app in NSWorkspace.shared.runningApplications where app.localizedName == name {
             appsByProcessID[app.processIdentifier] = app
         }
@@ -292,7 +348,7 @@ private func runningChromeApplications() -> [NSRunningApplication] {
 private func chromeAppWithTestWindow() -> NSRunningApplication? {
     for app in runningChromeApplications() {
         activate(app)
-        if focusedWindowTitle(for: app)?.contains(chromeWindowTitle) == true {
+        if focusedWindowTitle(for: app)?.contains(browserWindowTitle) == true {
             return app
         }
     }
@@ -301,33 +357,38 @@ private func chromeAppWithTestWindow() -> NSRunningApplication? {
 
 @discardableResult
 private func focusChromeTestWindow(allowFocusClick: Bool = true) throws -> NSRunningApplication {
-    guard let app = waitForValue(timeout: chromeLaunchTimeout, interval: 0.25, producer: chromeAppWithTestWindow) else {
+    guard let app = waitForValue(
+        timeout: browserLaunchTimeout,
+        interval: 0.25,
+        producer: chromeAppWithTestWindow
+    ) else {
         throw GuiTestFailure.message(
-            "Timed out waiting for Chrome to open the \(chromeTargetKind) test page."
+            "Timed out waiting for \(browserName) to open the \(browserTargetKind) test page."
         )
     }
 
     var didClick = false
-    let focused = wait(timeout: chromeFocusTimeout, interval: 0.25) {
+    let focused = wait(timeout: browserFocusTimeout, interval: 0.25) {
         activate(app)
 
         if allowFocusClick,
            NSWorkspace.shared.frontmostApplication?.processIdentifier != app.processIdentifier, !didClick {
-            try? clickFocusedWindowCenter(of: app, appName: chromeAppName)
+            try? clickFocusedWindowCenter(of: app, appName: browserAppName)
             didClick = true
         }
 
         return NSWorkspace.shared.frontmostApplication?.processIdentifier == app.processIdentifier &&
-            focusedWindowTitle(for: app)?.contains(chromeWindowTitle) == true
+            focusedWindowTitle(for: app)?.contains(browserWindowTitle) == true
     }
 
     guard focused else {
         let frontmost = NSWorkspace.shared.frontmostApplication?.localizedName ?? "<unknown>"
         let title = focusedWindowTitle(for: app) ?? "<unknown>"
         throw GuiTestFailure.message(
-            "Chrome is not focused on the textarea test page. " +
-            "Target: \(chromeTargetKind). " +
-            "Frontmost app: \(frontmost). Chrome front window title: \(title). Refusing to send GUI key events."
+            "\(browserName) is not focused on the textarea test page. " +
+            "Target: \(browserTargetKind). " +
+            "Frontmost app: \(frontmost). \(browserName) front window title: \(title). " +
+                "Refusing to send GUI key events."
         )
     }
 
@@ -370,7 +431,7 @@ private func typeDiagnosticSequence(
     iterations: Int
 ) throws {
     for iteration in 1...iterations {
-        print("Typing Chrome IME sequence iteration \(iteration)/\(iterations)")
+        print("Typing \(browserName) IME sequence iteration \(iteration)/\(iterations)")
         try verifyHisleCLIMode("roman", stage: "Iteration \(iteration) initial mode")
         try tapKey(KeyCode.repE, keyboard: keyboard, delays: delays)
         try tapModifier(KeyCode.rightShift, keyboard: keyboard, delays: delays, flag: .maskShift)
@@ -397,7 +458,7 @@ private func typeClickDuringCompositionSequence(
     keyboard: KeyboardDriver,
     delays: SeededDelayGenerator
 ) throws {
-    print("Typing Chrome IME click-during-composition sequence")
+    print("Typing \(browserName) IME click-during-composition sequence")
     try verifyHisleCLIMode("roman", stage: "Click scenario initial mode")
     try keyboard.tapCommandShortcut(KeyCode.downArrow)
     Thread.sleep(forTimeInterval: 0.2)
@@ -405,9 +466,9 @@ private func typeClickDuringCompositionSequence(
     try verifyHisleCLIMode("hangul", stage: "Click scenario right Shift")
     try tapKey(KeyCode.repJ, keyboard: keyboard, delays: delays)
 
-    let app = try focusChromeTestWindow(allowFocusClick: chromeScenario != "click-during-composition")
-    if chromeScenario != "click-during-composition" {
-        try clickFocusedWindowCenter(of: app, appName: chromeAppName)
+    let app = try focusChromeTestWindow(allowFocusClick: browserScenario != "click-during-composition")
+    if browserScenario != "click-during-composition" {
+        try clickFocusedWindowCenter(of: app, appName: browserAppName)
     }
     Thread.sleep(forTimeInterval: 0.25)
 
@@ -423,7 +484,7 @@ private func typeIdleStressSequence(
     delays: SeededDelayGenerator,
     iterations: Int
 ) throws {
-    print("Typing Chrome IME idle-stress sequence for \(iterations) iterations")
+    print("Typing \(browserName) IME idle-stress sequence for \(iterations) iterations")
     try verifyHisleCLIMode("roman", stage: "Idle stress initial mode")
     try tapModifier(KeyCode.rightShift, keyboard: keyboard, delays: delays, flag: .maskShift)
     try verifyHisleCLIMode("hangul", stage: "Idle stress right Shift")
@@ -456,7 +517,7 @@ private func typeMidlineInsertSequence(
     keyboard: KeyboardDriver,
     delays: SeededDelayGenerator
 ) throws {
-    print("Typing Chrome IME midline-insert sequence")
+    print("Typing \(browserName) IME midline-insert sequence")
     try verifyHisleCLIMode("roman", stage: "Midline insert initial mode")
     try tapModifier(KeyCode.rightShift, keyboard: keyboard, delays: delays, flag: .maskShift)
     try verifyHisleCLIMode("hangul", stage: "Midline insert right Shift")
@@ -471,7 +532,7 @@ private func typeTwoInsertMoveSequence(
     keyboard: KeyboardDriver,
     delays: SeededDelayGenerator
 ) throws {
-    print("Typing Chrome IME two-insert-move sequence")
+    print("Typing \(browserName) IME two-insert-move sequence")
     try verifyHisleCLIMode("roman", stage: "Two insert initial mode")
     try tapModifier(KeyCode.rightShift, keyboard: keyboard, delays: delays, flag: .maskShift)
     try verifyHisleCLIMode("hangul", stage: "Two insert first right Shift")
@@ -496,7 +557,7 @@ private func typeActiveMoveContinueSequence(
     keyboard: KeyboardDriver,
     delays: SeededDelayGenerator
 ) throws {
-    print("Typing Chrome IME active-move-continue sequence")
+    print("Typing \(browserName) IME active-move-continue sequence")
     try verifyHisleCLIMode("roman", stage: "Active move initial mode")
     try tapModifier(KeyCode.rightShift, keyboard: keyboard, delays: delays, flag: .maskShift)
     try verifyHisleCLIMode("hangul", stage: "Active move right Shift")
@@ -513,14 +574,14 @@ private func typeClickMoveContinueSequence(
     delays: SeededDelayGenerator,
     clickPoint: CGPoint
 ) throws {
-    print("Typing Chrome IME click-move-continue sequence")
+    print("Typing \(browserName) IME click-move-continue sequence")
     try verifyHisleCLIMode("roman", stage: "Click move initial mode")
     try tapModifier(KeyCode.rightShift, keyboard: keyboard, delays: delays, flag: .maskShift)
     try verifyHisleCLIMode("hangul", stage: "Click move right Shift")
     try tapKey(KeyCode.repJ, keyboard: keyboard, delays: delays)
     Thread.sleep(forTimeInterval: TimeInterval(idleMilliseconds) / 1000.0)
     print("Clicking after first input screen point: \(clickPoint)")
-    try clickScreenPoint(clickPoint, description: "Chrome click move caret")
+    try clickScreenPoint(clickPoint, description: "\(browserName) click move caret")
     Thread.sleep(forTimeInterval: 0.2)
     try tapKey(KeyCode.repG, keyboard: keyboard, delays: delays)
     try tapKey(KeyCode.repD, keyboard: keyboard, delays: delays)
@@ -534,13 +595,13 @@ private func typeDragSelectionInputSequence(
     selectionStartPoint: CGPoint,
     selectionEndPoint: CGPoint
 ) throws {
-    print("Typing Chrome IME drag-selection-input sequence")
+    print("Typing \(browserName) IME drag-selection-input sequence")
     try verifyHisleCLIMode("roman", stage: "Drag selection input initial mode")
     print("Dragging textarea selection from \(selectionStartPoint) to \(selectionEndPoint)")
     try dragScreenPoint(
         from: selectionStartPoint,
         to: selectionEndPoint,
-        description: "Chrome textarea selection"
+        description: "\(browserName) textarea selection"
     )
     try tapModifier(KeyCode.rightShift, keyboard: keyboard, delays: delays, flag: .maskShift)
     try verifyHisleCLIMode("hangul", stage: "Drag selection input right Shift")
@@ -552,7 +613,7 @@ private func typeSelectedRangeInputSequence(
     keyboard: KeyboardDriver,
     delays: SeededDelayGenerator
 ) throws {
-    print("Typing Chrome IME selected-range-input sequence")
+    print("Typing \(browserName) IME selected-range-input sequence")
     try verifyHisleCLIMode("roman", stage: "Selected range input initial mode")
     try tapModifier(KeyCode.rightShift, keyboard: keyboard, delays: delays, flag: .maskShift)
     try verifyHisleCLIMode("hangul", stage: "Selected range input right Shift")
@@ -564,7 +625,7 @@ private func typeSelectedRangeNumbersSequence(
     keyboard: KeyboardDriver,
     delays: SeededDelayGenerator
 ) throws {
-    print("Typing Chrome IME selected-range-numbers sequence")
+    print("Typing \(browserName) IME selected-range-numbers sequence")
     try verifyHisleCLIMode("roman", stage: "Selected range numbers initial mode")
     try tapModifier(KeyCode.rightShift, keyboard: keyboard, delays: delays, flag: .maskShift)
     try verifyHisleCLIMode("hangul", stage: "Selected range numbers right Shift")
@@ -585,7 +646,7 @@ private func typeSelectedRangeAnnyeonghaseyoSequence(
     delays: SeededDelayGenerator,
     scenarioName: String = "selected-range-annyeonghaseyo"
 ) throws {
-    print("Typing Chrome IME \(scenarioName) sequence")
+    print("Typing \(browserName) IME \(scenarioName) sequence")
     try verifyHisleCLIMode("roman", stage: "\(scenarioName) initial mode")
     try tapModifier(KeyCode.rightShift, keyboard: keyboard, delays: delays, flag: .maskShift)
     try verifyHisleCLIMode("hangul", stage: "\(scenarioName) right Shift")
@@ -608,11 +669,11 @@ private func typeDoubleClickSelectionAnnyeonghaseyoSequence(
     delays: SeededDelayGenerator,
     clickPoint: CGPoint
 ) throws {
-    print("Typing Chrome IME double-click-selection-annyeonghaseyo sequence")
+    print("Typing \(browserName) IME double-click-selection-annyeonghaseyo sequence")
     try verifyHisleCLIMode("roman", stage: "Double click selection initial mode")
     Thread.sleep(forTimeInterval: 0.7)
     print("Double-clicking content word at \(clickPoint)")
-    try doubleClickScreenPoint(clickPoint, description: "Chrome double-click word selection")
+    try doubleClickScreenPoint(clickPoint, description: "\(browserName) double-click word selection")
     try tapModifier(KeyCode.rightShift, keyboard: keyboard, delays: delays, flag: .maskShift)
     try verifyHisleCLIMode("hangul", stage: "Double click selection right Shift")
 
@@ -631,8 +692,9 @@ private func typeDoubleClickSelectionAnnyeonghaseyoSequence(
 
 private func runChromeDriver() throws {
     let options = try DriverOptions.parse(arguments: Array(CommandLine.arguments.dropFirst()))
+    let rerunTarget = browserKind == "firefox" ? "firefox-ime-repro" : "chrome-ime-repro"
     try requireAccessibilityPermission(
-        rerunCommand: "nix develop .#browser --command -- make chrome-ime-repro"
+        rerunCommand: "nix develop .#browser --command -- make \(rerunTarget)"
     )
     try waitForObserverReadiness(options.readyFile)
     let observerReady = ObserverReadyMetadata.load(from: options.readyFile)
@@ -644,13 +706,15 @@ private func runChromeDriver() throws {
     try writeJSONObject(
         [
             "active_input_source_before_selection": originalInputSourceID ?? NSNull(),
+            "browser_kind": browserKind,
+            "browser_name": browserName,
             "driver_start_time": driverStartTime,
             "expected_value": expectedText,
             "iteration_count": options.iterations,
             "seed": options.seed,
-            "scenario": chromeScenario,
+            "scenario": browserScenario,
             "selected_input_source_id": hisleInputSourceID,
-            "target_kind": chromeTargetKind,
+            "target_kind": browserTargetKind,
             "delay_min_milliseconds": delayMinMilliseconds,
             "delay_max_milliseconds": delayMaxMilliseconds,
             "idle_milliseconds": idleMilliseconds,
@@ -668,15 +732,15 @@ private func runChromeDriver() throws {
     }
 
     let shouldClickToFocus = !skipFocusClick &&
-        chromeScenario != "click-during-composition" &&
-        chromeScenario != "selected-range-input" &&
-        chromeScenario != "selected-range-numbers" &&
-        chromeScenario != "selected-range-annyeonghaseyo" &&
-        chromeScenario != "stale-selection-annyeonghaseyo" &&
-        chromeScenario != "double-click-selection-annyeonghaseyo"
+        browserScenario != "click-during-composition" &&
+        browserScenario != "selected-range-input" &&
+        browserScenario != "selected-range-numbers" &&
+        browserScenario != "selected-range-annyeonghaseyo" &&
+        browserScenario != "stale-selection-annyeonghaseyo" &&
+        browserScenario != "double-click-selection-annyeonghaseyo"
     let app = try focusChromeTestWindow(allowFocusClick: shouldClickToFocus)
     if shouldClickToFocus {
-        try clickFocusedWindowCenter(of: app, appName: chromeAppName)
+        try clickFocusedWindowCenter(of: app, appName: browserAppName)
     }
 
     let runtimeIdentityLogStartDate = Date()
@@ -687,27 +751,27 @@ private func runChromeDriver() throws {
 
     let focusedApp = try focusChromeTestWindow(allowFocusClick: shouldClickToFocus)
     if shouldClickToFocus {
-        try clickFocusedWindowCenter(of: focusedApp, appName: chromeAppName)
+        try clickFocusedWindowCenter(of: focusedApp, appName: browserAppName)
     }
     if clickInitialCaret {
         let point: CGPoint?
         if let clientPoint = observerReady.initialCaretClientPoint,
            let webAreaFrame = focusedWebAreaFrame(for: focusedApp) {
             point = CGPoint(x: webAreaFrame.minX + clientPoint.x, y: webAreaFrame.minY + clientPoint.y)
-            print("Using Chrome AXWebArea frame for initial caret click: \(webAreaFrame)")
+            print("Using \(browserName) AXWebArea frame for initial caret click: \(webAreaFrame)")
         } else {
             point = observerReady.initialCaretScreenPoint
         }
 
         guard let point else {
             throw GuiTestFailure.message(
-                "HISLE_CHROME_CLICK_INITIAL_CARET is set, but observer-ready.json has " +
+                "\(browserEnvPrefix)_CLICK_INITIAL_CARET is set, but observer-ready.json has " +
                     "no initial caret screen point."
             )
         }
         let adjustedPoint = adjustedClickPoint(point)
         print("Clicking initial caret screen point: \(adjustedPoint)")
-        try clickScreenPoint(adjustedPoint, description: "Chrome initial caret")
+        try clickScreenPoint(adjustedPoint, description: "\(browserName) initial caret")
     }
 
     let logStream = HisleLogStream(outputURL: options.runDirectory.appendingPathComponent("ime.log"))
@@ -727,7 +791,7 @@ private func runChromeDriver() throws {
         keyLogger.append(event)
     })
 
-    switch chromeScenario {
+    switch browserScenario {
     case "standard":
         try typeDiagnosticSequence(keyboard: keyboard, delays: delays, iterations: options.iterations)
     case "click-during-composition":
@@ -742,7 +806,9 @@ private func runChromeDriver() throws {
         try typeActiveMoveContinueSequence(keyboard: keyboard, delays: delays)
     case "click-move-continue":
         guard let point = observerReady.clickAfterInputScreenPoint else {
-            throw GuiTestFailure.message("HISLE_CHROME_CLICK_AFTER_INPUT_CARET is required for click-move-continue.")
+            throw GuiTestFailure.message(
+                "\(browserEnvPrefix)_CLICK_AFTER_INPUT_CARET is required for click-move-continue."
+            )
         }
         try typeClickMoveContinueSequence(keyboard: keyboard, delays: delays, clickPoint: adjustedClickPoint(point))
     case "drag-selection-input":
@@ -757,7 +823,7 @@ private func runChromeDriver() throws {
             focusedApp: focusedApp
         )
         guard let startPoint, let endPoint else {
-            throw GuiTestFailure.message("HISLE_CHROME_DRAG_SELECTION is required for drag-selection-input.")
+            throw GuiTestFailure.message("\(browserEnvPrefix)_DRAG_SELECTION is required for drag-selection-input.")
         }
         try typeDragSelectionInputSequence(
             keyboard: keyboard,
@@ -775,7 +841,7 @@ private func runChromeDriver() throws {
         try typeSelectedRangeAnnyeonghaseyoSequence(
             keyboard: keyboard,
             delays: delays,
-            scenarioName: chromeScenario
+            scenarioName: browserScenario
         )
     case "double-click-selection-annyeonghaseyo":
         let point = observedScreenPoint(
@@ -785,7 +851,7 @@ private func runChromeDriver() throws {
         )
         guard let point else {
             throw GuiTestFailure.message(
-                "HISLE_CHROME_INITIAL_CARET is required for double-click-selection-annyeonghaseyo."
+                "\(browserEnvPrefix)_INITIAL_CARET is required for double-click-selection-annyeonghaseyo."
             )
         }
         try typeDoubleClickSelectionAnnyeonghaseyoSequence(
@@ -794,7 +860,7 @@ private func runChromeDriver() throws {
             clickPoint: adjustedClickPoint(point)
         )
     default:
-        throw GuiTestFailure.message("Unsupported HISLE_CHROME_SCENARIO: \(chromeScenario)")
+        throw GuiTestFailure.message("Unsupported \(browserEnvPrefix)_SCENARIO: \(browserScenario)")
     }
     try keyLogger.throwIfFailed()
     writeRuntimeIdentityLog(
@@ -802,8 +868,8 @@ private func runChromeDriver() throws {
         since: runtimeIdentityLogStartDate
     )
     print(
-        "Chrome IME HID sequence completed. Target: \(chromeTargetKind). " +
-            "Scenario: \(chromeScenario). Expected final value: \(String(reflecting: expectedText))"
+        "\(browserName) IME HID sequence completed. Target: \(browserTargetKind). " +
+            "Scenario: \(browserScenario). Expected final value: \(String(reflecting: expectedText))"
     )
 }
 
@@ -814,9 +880,9 @@ private enum ChromeIMEDriver {
             try runChromeDriver()
         } catch {
             if let failure = error as? GuiTestFailure {
-                fputs("Chrome IME driver failed: \(failure.description)\n", stderr)
+                fputs("\(browserName) IME driver failed: \(failure.description)\n", stderr)
             } else {
-                fputs("Chrome IME driver failed: \(error)\n", stderr)
+                fputs("\(browserName) IME driver failed: \(error)\n", stderr)
             }
             exit(1)
         }

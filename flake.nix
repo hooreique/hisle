@@ -50,6 +50,7 @@
 
       devShells.aarch64-darwin.browser = pkgs.mkShell {
         packages = [
+          pkgs.geckodriver
           pkgs.nodejs
           pkgs.nushell
           pkgs.swiftlint
