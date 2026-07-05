@@ -142,6 +142,15 @@ range, derive continuation from that replacement range plus the committed text
 length, because fast browser input can expose a transient post-commit
 `selectedRange()` that is ahead of the intended caret.
 
+For a whitespace `FlushThenEmit` boundary that closes active Hangul marked text,
+commit the active composition and the whitespace as separate host insertions.
+The active composition still uses the owned marked-text replacement range. The
+whitespace uses the current-selection sentinel so browser editors move their
+real caret after the inserted boundary text before any later host-forwarded
+Backspace. Advance the owned insertion range by the whitespace length for the
+next marked-text update, but do not let this rule apply to ordinary plain
+commits with no active marked text.
+
 Keep this policy app-agnostic. Do not add Confluence, Chromium, or editor-name
 branches unless a later bug proves that a general IMK range policy is
 insufficient.

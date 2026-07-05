@@ -51,6 +51,7 @@ enum KeyCode {
     static let slash: CGKeyCode = 44
     static let semicolon: CGKeyCode = 41
     static let space: CGKeyCode = 49
+    static let backspace: CGKeyCode = 51
     static let escape: CGKeyCode = 53
     static let backtick: CGKeyCode = 50
     static let leftCommand: CGKeyCode = 55

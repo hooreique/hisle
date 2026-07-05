@@ -5,8 +5,9 @@ import os
 
 extension InputController {
     func process(_ input: ColeSebeolInput, client sender: Any?) -> Bool {
+        let boundaryText = markedText.isActive ? flushThenEmitBoundaryText(for: input) : nil
         let output = hangulEngine.process(input)
-        guard apply(output, to: sender) else {
+        guard apply(output, to: sender, flushThenEmitBoundaryText: boundaryText) else {
             return false
         }
         return output.forwardedActions.isEmpty
@@ -24,10 +25,20 @@ extension InputController {
         return commitText(text, client: sender)
     }
 
-    func apply(_ output: ColeSebeolOutput, to sender: Any?) -> Bool {
+    func apply(
+        _ output: ColeSebeolOutput,
+        to sender: Any?,
+        flushThenEmitBoundaryText boundaryText: String? = nil
+    ) -> Bool {
         guard let client = textClient(from: sender) else {
             logger.error("missing IMKTextInput client")
             return false
+        }
+
+        if let splitOutput = splitFlushThenEmitOutput(output, boundaryText: boundaryText) {
+            _ = insertCommittedText(splitOutput.compositionText, client: client, traceAction: "commit")
+            insertCommittedBoundaryText(splitOutput.boundaryText, client: client)
+            return true
         }
 
         if !output.committedText.isEmpty {
@@ -104,6 +115,30 @@ extension InputController {
         return replacementRange
     }
 
+    private func insertCommittedBoundaryText(_ text: String, client: IMKTextInput) {
+        let replacementRange = MarkedTextRangePolicy.currentSelectionReplacementRange
+#if DEBUG
+        ClientRangeTracer(logger: logger).traceClientRanges(
+            "before-boundary committedLength=\(text.utf16.count) " +
+                "replacement=\(NSStringFromRange(replacementRange))",
+            client: client,
+            markedText: markedText
+        )
+#endif
+        client.insertText(text, replacementRange: replacementRange)
+        markedTextRangeTracker.recordBoundaryTextAfterActiveComposition(
+            committedLength: text.utf16.count
+        )
+        markedText.clear()
+#if DEBUG
+        ClientRangeTracer(logger: logger).traceClientRanges(
+            "after-boundary committedLength=\(text.utf16.count)",
+            client: client,
+            markedText: markedText
+        )
+#endif
+    }
+
     private func updateMarkedText(_ text: String, client: IMKTextInput) {
         let wasMarkedTextActive = markedText.isActive
         if pendingMarkedTextReplacement == nil {
@@ -174,5 +209,34 @@ extension InputController {
         ClientRangeTracer(logger: logger).traceReplacementRange(decision, markedText: markedText)
 #endif
         return decision
+    }
+
+    private func flushThenEmitBoundaryText(for input: ColeSebeolInput) -> String? {
+        switch input {
+        case .whitespace(let scalar):
+            return String(scalar)
+        default:
+            return nil
+        }
+    }
+
+    private func splitFlushThenEmitOutput(
+        _ output: ColeSebeolOutput,
+        boundaryText: String?
+    ) -> (compositionText: String, boundaryText: String)? {
+        guard let boundaryText,
+              !output.committedText.isEmpty,
+              output.markedText.isEmpty,
+              output.forwardedActions.isEmpty,
+              output.committedText.hasSuffix(boundaryText)
+        else {
+            return nil
+        }
+
+        let compositionText = String(output.committedText.dropLast(boundaryText.count))
+        guard !compositionText.isEmpty else {
+            return nil
+        }
+        return (compositionText, boundaryText)
     }
 }

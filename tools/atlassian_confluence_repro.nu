@@ -149,8 +149,9 @@ let remote_debugging_port = ($env.CHROME_REMOTE_DEBUGGING_PORT? | default (rando
 let chrome_path = ($env.CHROME_PATH? | default "")
 let chrome_app = ($env.HISLE_ATLASSIAN_CHROME_APP? | default "Google Chrome")
 let keep_open = ($env.HISLE_ATLASSIAN_KEEP_OPEN? | default "")
-let expected_text = ($env.HISLE_ATLASSIAN_EXPECTED_TEXT? | default "안녕하세요")
 let scenario = ($env.HISLE_ATLASSIAN_SCENARIO? | default "annyeonghaseyo")
+let default_expected_text = if $scenario == "annyeong-space-backspace" { "안녕" } else { "안녕하세요" }
+let expected_text = ($env.HISLE_ATLASSIAN_EXPECTED_TEXT? | default $default_expected_text)
 let word_count = ($env.HISLE_ATLASSIAN_WORD_COUNT? | default "")
 let roman_text = ($env.HISLE_ATLASSIAN_ROMAN_TEXT? | default "")
 let target_selector = ($env.HISLE_ATLASSIAN_TARGET_SELECTOR? | default "")

@@ -370,6 +370,10 @@ Useful environment options:
   `안녕하세요` words separated by spaces. Combine with
   `HISLE_ATLASSIAN_WORD_COUNT`, default `3`, to reproduce cursor jumps during
   ordinary multi-word Hangul input.
+- `HISLE_ATLASSIAN_SCENARIO=annyeong-space-backspace`, type `안녕`, press
+  Space, then press Backspace. The expected inserted text defaults to `안녕`;
+  combine it with `HISLE_ATLASSIAN_INITIAL_CARET_OFFSET` for a strict full-text
+  assertion inside existing Confluence content.
 - `HISLE_ATLASSIAN_SCENARIO=roman-foo-bar`, type visible Roman text
   `foo bar foo bar` through hisle Roman mode.
 - `HISLE_ATLASSIAN_SCENARIO=roman-text` with `HISLE_ATLASSIAN_ROMAN_TEXT`,

@@ -22,7 +22,7 @@ struct PendingMarkedTextReplacement {
 }
 
 enum MarkedTextRangePolicy {
-    static let policyID = "current-selection-nsnotfound+conditional-postcommit-caret"
+    static let policyID = "current-selection-nsnotfound+split-boundary+conditional-postcommit-caret"
 
     static var currentSelectionReplacementRange: NSRange {
         NSRange(location: NSNotFound, length: 0)
@@ -193,6 +193,23 @@ struct MarkedTextRangeTracker {
 
         self.markedRange = markedRange
         self.insertionRange = insertionRange
+    }
+
+    mutating func recordBoundaryTextAfterActiveComposition(committedLength: Int) {
+        markedRange = nil
+
+        guard committedLength > 0,
+              let insertionRange,
+              let advancedRange = Self.collapsedRange(
+                at: insertionRange.location,
+                advancedBy: committedLength
+              )
+        else {
+            self.insertionRange = nil
+            return
+        }
+
+        self.insertionRange = advancedRange
     }
 
     mutating func recordMarkedTextClear(client: IMKTextInput) {
