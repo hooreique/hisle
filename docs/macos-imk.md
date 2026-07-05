@@ -131,11 +131,16 @@ standalone punctuation input. Clear owned ranges on user or host actions that
 can legitimately move the caret: mouse down, host-forwarded navigation/action
 keys, mode changes, deactivation, and external cancel/commit boundaries.
 
-After `insertText(_:replacementRange:)` for an active composition commit,
-prefer a valid collapsed `selectedRange()` from the client as the next owned
-insertion point. Some hosts remap IMK coordinates after a commit; deriving
+After `insertText(_:replacementRange:)` for an active composition commit, prefer
+a valid collapsed `selectedRange()` from the client as the next owned insertion
+point only when the pre-commit host selection was inconsistent with the owned
+replacement range. Some hosts remap IMK coordinates after a commit; deriving
 continuation by arithmetic from the pre-commit replacement range can point at
-the wrong document position in the middle of rich editor content.
+the wrong document position in the middle of rich editor content. When the
+pre-commit host selection is already consistent with the owned replacement
+range, derive continuation from that replacement range plus the committed text
+length, because fast browser input can expose a transient post-commit
+`selectedRange()` that is ahead of the intended caret.
 
 Keep this policy app-agnostic. Do not add Confluence, Chromium, or editor-name
 branches unless a later bug proves that a general IMK range policy is

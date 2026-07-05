@@ -688,6 +688,31 @@ private func typeAnnyeongWordsSequence(
     Thread.sleep(forTimeInterval: TimeInterval(idleMilliseconds) / 1000.0)
 }
 
+private func typeAnnyeongWordRepeatsSequence(
+    keyboard: KeyboardDriver,
+    delays: SeededDelayGenerator
+) throws {
+    print("Typing \(browserName) IME annyeong-word-repeats sequence")
+    try verifyHisleCLIMode("roman", stage: "annyeong-word-repeats initial mode")
+    try tapModifier(KeyCode.rightShift, keyboard: keyboard, delays: delays, flag: .maskShift)
+    try verifyHisleCLIMode("hangul", stage: "annyeong-word-repeats right Shift")
+
+    for index in 1...4 {
+        for keyCode in [
+            KeyCode.repJ, KeyCode.repF, KeyCode.repS,
+            KeyCode.repH, KeyCode.repE, KeyCode.repA
+        ] {
+            try tapKey(keyCode, keyboard: keyboard, delays: delays)
+        }
+
+        if index < 4 {
+            try tapKey(KeyCode.space, keyboard: keyboard, delays: delays)
+        }
+    }
+
+    Thread.sleep(forTimeInterval: TimeInterval(idleMilliseconds) / 1000.0)
+}
+
 private func typeDoubleClickSelectionAnnyeonghaseyoSequence(
     keyboard: KeyboardDriver,
     delays: SeededDelayGenerator,
@@ -869,6 +894,8 @@ private func runChromeDriver() throws {
         )
     case "annyeong-words":
         try typeAnnyeongWordsSequence(keyboard: keyboard, delays: delays)
+    case "annyeong-word-repeats":
+        try typeAnnyeongWordRepeatsSequence(keyboard: keyboard, delays: delays)
     case "double-click-selection-annyeonghaseyo":
         let point = observedScreenPoint(
             clientPoint: observerReady.initialCaretClientPoint,

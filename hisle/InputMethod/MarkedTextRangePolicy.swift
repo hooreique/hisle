@@ -22,7 +22,7 @@ struct PendingMarkedTextReplacement {
 }
 
 enum MarkedTextRangePolicy {
-    static let policyID = "current-selection-nsnotfound+owned-composition-continuation"
+    static let policyID = "current-selection-nsnotfound+conditional-postcommit-caret"
 
     static var currentSelectionReplacementRange: NSRange {
         NSRange(location: NSNotFound, length: 0)
@@ -138,6 +138,7 @@ struct MarkedTextRangeTracker {
 
     mutating func recordCommittedText(
         replacementRange: NSRange,
+        preCommitSelectedRange: NSRange,
         committedLength: Int,
         wasMarkedTextActive: Bool,
         client: IMKTextInput
@@ -153,7 +154,10 @@ struct MarkedTextRangeTracker {
             return
         }
 
-        if let selectedRange = Self.validCollapsedRange(client.selectedRange()) {
+        if shouldTrustPostCommitSelectedRange(
+            preCommitSelectedRange: preCommitSelectedRange,
+            replacementRange: replacementRange
+        ), let selectedRange = Self.validCollapsedRange(client.selectedRange()) {
             insertionRange = selectedRange
             return
         }
@@ -220,6 +224,22 @@ struct MarkedTextRangeTracker {
         }
 
         return insertionRange?.location
+    }
+
+    private func shouldTrustPostCommitSelectedRange(
+        preCommitSelectedRange: NSRange,
+        replacementRange: NSRange
+    ) -> Bool {
+        guard replacementRange.location != NSNotFound,
+              preCommitSelectedRange.location != NSNotFound
+        else {
+            return false
+        }
+
+        return !MarkedTextRangePolicy.isSelectionRange(
+            preCommitSelectedRange,
+            consistentWithMarkedRange: replacementRange
+        )
     }
 
     private func startLocationForMarkedTextUpdate(

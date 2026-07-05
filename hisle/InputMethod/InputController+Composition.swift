@@ -75,7 +75,8 @@ extension InputController {
         traceAction: String = "insert"
     ) -> NSRange {
         let wasMarkedTextActive = markedText.isActive
-        let replacementRange = replacementRange(for: client)
+        let replacementDecision = replacementDecision(for: client)
+        let replacementRange = replacementDecision.replacementRange
 #if DEBUG
         ClientRangeTracer(logger: logger).traceClientRanges(
             "before-\(traceAction) committedLength=\(text.utf16.count) " +
@@ -87,6 +88,7 @@ extension InputController {
         client.insertText(text, replacementRange: replacementRange)
         markedTextRangeTracker.recordCommittedText(
             replacementRange: replacementRange,
+            preCommitSelectedRange: replacementDecision.selectedRange,
             committedLength: text.utf16.count,
             wasMarkedTextActive: wasMarkedTextActive,
             client: client
@@ -161,7 +163,7 @@ extension InputController {
 #endif
     }
 
-    private func replacementRange(for client: IMKTextInput) -> NSRange {
+    private func replacementDecision(for client: IMKTextInput) -> MarkedTextReplacementDecision {
         let decision = MarkedTextRangePolicy.replacementDecision(
             hasMarkedText: markedText.isActive,
             ownedMarkedRange: markedTextRangeTracker.markedRange,
@@ -171,6 +173,6 @@ extension InputController {
 #if DEBUG
         ClientRangeTracer(logger: logger).traceReplacementRange(decision, markedText: markedText)
 #endif
-        return decision.replacementRange
+        return decision
     }
 }
