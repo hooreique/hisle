@@ -121,10 +121,14 @@ boundaries.
 
 While `hisle` owns an active marked text sequence, it tracks the marked range
 and the collapsed insertion range created by its own updates and commits. Use
-that owned range for the next marked-text update or same typing-burst committed
-text, and clear it on user or host actions that can legitimately move the caret:
-mouse down, host-forwarded navigation/action keys, mode changes, deactivation,
-and external cancel/commit boundaries.
+the owned marked range for replacing active marked text, and use the owned
+collapsed insertion range only to place the next marked-text update after a
+commit. Ordinary committed text with no active marked text must still use the
+current-selection sentinel, because some rich editors report unstable explicit
+document ranges during plain Roman input. Clear owned ranges on user or host
+actions that can legitimately move the caret: mouse down, host-forwarded
+navigation/action keys, mode changes, deactivation, and external cancel/commit
+boundaries.
 
 After `insertText(_:replacementRange:)`, prefer a valid collapsed
 `selectedRange()` from the client as the next owned insertion point. Some hosts

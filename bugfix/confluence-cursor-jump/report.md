@@ -19,17 +19,20 @@ integration around Confluence's reported selection and marked range behavior.
 ## Fix Status
 
 Fixed on 2026-07-05 after rechecking the true middle-insertion case, where
-existing text remains after the insertion point. The fix extends the previous
-narrow commit-plus-marked continuation case to an input-method-owned caret
-policy that learns from the host after commits.
+existing text remains after the insertion point. A later same-day Roman-mode
+regression showed that applying the owned insertion range to ordinary committed
+text was too broad: Confluence can move explicit ranges even when no marked text
+is active. The current policy keeps the owned range only for active marked text
+and the next marked-text update after a commit.
 
 The new policy keeps using `NSRange(location: NSNotFound, length: 0)` for
-ordinary unowned current-selection insertion, but tracks the marked range and
-collapsed insertion range created by `hisle`'s own composition updates and
-commits. While the user is in the same typing burst, `hisle` uses that owned
-range for later marked updates, composition commits, whitespace, and the next
-marked-text start. It clears the owned range on mouse down, host-forwarded
-action keys, mode changes, deactivation, and external cancel/commit boundaries.
+ordinary current-selection insertion, including Roman-mode committed text with
+no active marked text. It tracks the marked range and collapsed insertion range
+created by `hisle`'s own composition updates and commits, then uses those owned
+ranges for later marked updates, composition commits, whitespace that flushes an
+active composition, and the next marked-text start. It clears the owned range on
+mouse down, host-forwarded action keys, mode changes, deactivation, and external
+cancel/commit boundaries.
 
 The important middle-insertion correction is that the tracker now prefers a
 valid collapsed `selectedRange()` observed immediately after
@@ -41,8 +44,8 @@ content.
 Runtime identity for the verified build:
 
 ```text
-hisle 0.1.8-debug, build 12
-replacementPolicy=current-selection-nsnotfound+owned-post-insert-caret
+hisle 0.1.9-debug, build 12
+replacementPolicy=current-selection-nsnotfound+owned-marked-continuation
 bundle=/Users/kia2964158/Library/Input Methods/hisle.app
 ```
 
@@ -67,15 +70,75 @@ the next composition could still be placed at the wrong position when the
 pre-commit replacement coordinate no longer matched Confluence's post-commit
 coordinate.
 
-The build 12 trace still shows Confluence reporting shifted client ranges, but
-the input method no longer follows those host-selected positions for its owned
-typing burst. Representative IMK decisions from the passing middle run include:
+The fixed Hangul trace still shows Confluence reporting shifted client ranges,
+but the input method no longer follows those host-selected positions for its
+owned marked-text typing burst. Representative IMK decisions from the passing
+middle run include:
 
 ```text
 reason=owned-marked selected={86, 1} marked={9, 1} replacement={9, 1}
 after-commit committedLength=1 selected={87, 0}
 reason=owned-insertion selected={87, 0} replacement={87, 0}
 ```
+
+The later Roman-mode regression was captured with no composition events. The
+old broad owned-insertion policy turned `foo bar foo bar` into interleaved text
+such as `fobar foo bar`, because ordinary committed Roman text was sent to an
+explicit range that Confluence had moved. After narrowing the policy, a unique
+Roman run produced the expected text contiguously:
+
+```text
+Failing artifact: local/atlassian/runs/roman-foo-bar-20260705-2030/
+Traced fixed artifact: local/atlassian/runs/roman-text-foo-qux-fixed-20260705-2105/
+Current-driver fixed artifact: local/atlassian/runs/roman-text-foo-xyz-fixed-20260705-2125/
+Expected text: foo xyz foo xyz
+matches_expected_text: true
+contains_expected_text: true
+composition_event_count: 0
+```
+
+Representative fixed Roman IMK decisions use the current-selection sentinel for
+each plain committed character:
+
+```text
+replacement={9223372036854775807, 0} reason=current-selection
+```
+
+Follow-up verification on 2026-07-05 passed the known live Confluence cursor
+jump repros with the current debug build:
+
+```text
+verify-hangul-words5-end-20260705:
+  expected_text: 안녕하세요 안녕하세요 안녕하세요 안녕하세요 안녕하세요
+  matches_expected_text: true
+
+verify-hangul-words5-middle-20260705:
+  expected_text: 안녕하세요 안녕하세요 안녕하세요 안녕하세요 안녕하세요
+  initial_caret_offset: 175
+  matches_expected_text: true
+  matches_expected_full_text: true
+
+verify-roman-foo-bar-20260705:
+  expected_text: foo bar foo bar
+  matches_expected_text: true
+
+verify-roman-unique-qwx-20260705:
+  expected_text: qwx foo zyx qwx
+  matches_expected_text: true
+  composition_event_count: 0
+```
+
+The follow-up live verification commands were:
+
+```sh
+env HISLE_ATLASSIAN_REUSE_CHROME=1 CHROME_REMOTE_DEBUGGING_PORT=60739 HISLE_ATLASSIAN_SCENARIO=annyeonghaseyo-words HISLE_ATLASSIAN_WORD_COUNT=5 HISLE_ATLASSIAN_EXPECTED_TEXT='안녕하세요 안녕하세요 안녕하세요 안녕하세요 안녕하세요' HISLE_ATLASSIAN_KEEP_OPEN=1 RUN_ID=verify-hangul-words5-end-20260705 nix develop .#browser --command -- nu tools/atlassian_confluence_repro.nu
+env HISLE_ATLASSIAN_REUSE_CHROME=1 CHROME_REMOTE_DEBUGGING_PORT=60739 HISLE_ATLASSIAN_SCENARIO=annyeonghaseyo-words HISLE_ATLASSIAN_WORD_COUNT=5 HISLE_ATLASSIAN_EXPECTED_TEXT='안녕하세요 안녕하세요 안녕하세요 안녕하세요 안녕하세요' HISLE_ATLASSIAN_INITIAL_CARET_OFFSET=middle HISLE_ATLASSIAN_KEEP_OPEN=1 RUN_ID=verify-hangul-words5-middle-20260705 nix develop .#browser --command -- nu tools/atlassian_confluence_repro.nu
+env HISLE_ATLASSIAN_REUSE_CHROME=1 CHROME_REMOTE_DEBUGGING_PORT=60739 HISLE_ATLASSIAN_SCENARIO=roman-foo-bar HISLE_ATLASSIAN_EXPECTED_TEXT='foo bar foo bar' HISLE_ATLASSIAN_KEEP_OPEN=1 RUN_ID=verify-roman-foo-bar-20260705 nix develop .#browser --command -- nu tools/atlassian_confluence_repro.nu
+env HISLE_ATLASSIAN_REUSE_CHROME=1 CHROME_REMOTE_DEBUGGING_PORT=60739 HISLE_ATLASSIAN_SCENARIO=roman-text HISLE_ATLASSIAN_ROMAN_TEXT='qwx foo zyx qwx' HISLE_ATLASSIAN_EXPECTED_TEXT='qwx foo zyx qwx' HISLE_ATLASSIAN_KEEP_OPEN=1 RUN_ID=verify-roman-unique-qwx-20260705 nix develop .#browser --command -- nu tools/atlassian_confluence_repro.nu
+```
+
+This verifies the known cursor-jump failure modes in the live Confluence page.
+It does not claim every possible Confluence editor state is covered.
 
 ## Primary Multi-Word Reproduction
 
@@ -277,6 +340,8 @@ nix develop --command -- make build
 nix develop --command -- make gui-smoke-test
 env HISLE_CHROME_SCENARIO=stale-selection-annyeonghaseyo RUN_ID=stale-selection-annyeonghaseyo-owned-post-insert-caret nix develop .#browser --command -- nu tools/chrome_ime_repro.nu
 env HISLE_ATLASSIAN_REUSE_CHROME=1 CHROME_REMOTE_DEBUGGING_PORT=57325 HISLE_ATLASSIAN_INITIAL_CARET_OFFSET=middle HISLE_ATLASSIAN_SCENARIO=annyeonghaseyo-words HISLE_ATLASSIAN_WORD_COUNT=3 HISLE_ATLASSIAN_EXPECTED_TEXT='안녕하세요 안녕하세요 안녕하세요' RUN_ID=words-three-owned-post-insert-caret-middle-range nix develop .#browser --command -- nu tools/atlassian_confluence_repro.nu
+env HISLE_ATLASSIAN_REUSE_CHROME=1 CHROME_REMOTE_DEBUGGING_PORT=60739 HISLE_ATLASSIAN_SCENARIO=roman-text HISLE_ATLASSIAN_ROMAN_TEXT='foo qux foo qux' HISLE_ATLASSIAN_EXPECTED_TEXT='foo qux foo qux' HISLE_ATLASSIAN_KEEP_OPEN=1 RUN_ID=roman-text-foo-qux-fixed-20260705-2105 nix develop .#browser --command -- nu tools/atlassian_confluence_repro.nu
+env HISLE_ATLASSIAN_REUSE_CHROME=1 CHROME_REMOTE_DEBUGGING_PORT=60739 HISLE_ATLASSIAN_SCENARIO=roman-text HISLE_ATLASSIAN_ROMAN_TEXT='foo xyz foo xyz' HISLE_ATLASSIAN_EXPECTED_TEXT='foo xyz foo xyz' HISLE_ATLASSIAN_KEEP_OPEN=1 RUN_ID=roman-text-foo-xyz-fixed-20260705-2125 nix develop .#browser --command -- nu tools/atlassian_confluence_repro.nu
 nix develop --command -- make version-check
 git diff --check
 ```
@@ -285,4 +350,6 @@ All commands above exited with status 0. The GUI smoke test verified the
 documented Roman/Hangul mode transitions, shortcut forwarding, and input-source
 round-trip Roman reset. The stale selected-range Chrome fixture still produced
 exactly `안녕하세요`. The Confluence run verified full-text equality at a middle
-caret position with existing text after the insertion point.
+caret position with existing text after the insertion point. The Confluence
+Roman-mode run verified that plain committed Roman input stays contiguous in
+the editor without composition events.

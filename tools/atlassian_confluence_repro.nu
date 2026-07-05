@@ -152,6 +152,7 @@ let keep_open = ($env.HISLE_ATLASSIAN_KEEP_OPEN? | default "")
 let expected_text = ($env.HISLE_ATLASSIAN_EXPECTED_TEXT? | default "안녕하세요")
 let scenario = ($env.HISLE_ATLASSIAN_SCENARIO? | default "annyeonghaseyo")
 let word_count = ($env.HISLE_ATLASSIAN_WORD_COUNT? | default "")
+let roman_text = ($env.HISLE_ATLASSIAN_ROMAN_TEXT? | default "")
 let target_selector = ($env.HISLE_ATLASSIAN_TARGET_SELECTOR? | default "")
 let edit_page = ($env.HISLE_ATLASSIAN_EDIT? | default "")
 let window_title_contains = ($env.HISLE_ATLASSIAN_WINDOW_TITLE_CONTAINS? | default "")
@@ -290,6 +291,7 @@ let driver_result = do {
         HISLE_ATLASSIAN_EXPECTED_TEXT: $expected_text
         HISLE_ATLASSIAN_SCENARIO: $scenario
         HISLE_ATLASSIAN_WORD_COUNT: $word_count
+        HISLE_ATLASSIAN_ROMAN_TEXT: $roman_text
         HISLE_ATLASSIAN_DELAY_MIN_MS: ($env.HISLE_ATLASSIAN_DELAY_MIN_MS? | default "")
         HISLE_ATLASSIAN_DELAY_MAX_MS: ($env.HISLE_ATLASSIAN_DELAY_MAX_MS? | default "")
         HISLE_ATLASSIAN_IDLE_MS: ($env.HISLE_ATLASSIAN_IDLE_MS? | default "")
@@ -348,6 +350,7 @@ let driver_state = if ($driver_state_file | path exists) {
     expected_text: $expected_text
     scenario: $scenario
     word_count: (maybe-null $word_count)
+    roman_text: (maybe-null $roman_text)
     target_selector: (maybe-null $target_selector)
     initial_caret_offset: (maybe-null $initial_caret_offset)
     edit_page: (if ($edit_page | is-empty) { true } else { $edit_page != "0" })

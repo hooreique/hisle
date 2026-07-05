@@ -27,6 +27,8 @@ private let atlassianScenario = ProcessInfo.processInfo.environment["HISLE_ATLAS
 private let atlassianWordCount = environmentInteger("HISLE_ATLASSIAN_WORD_COUNT", defaultValue: 3, minimum: 1)
 private let expectedText = ProcessInfo.processInfo.environment["HISLE_ATLASSIAN_EXPECTED_TEXT"]
     .flatMap { $0.isEmpty ? nil : $0 } ?? "안녕하세요"
+private let atlassianRomanText = ProcessInfo.processInfo.environment["HISLE_ATLASSIAN_ROMAN_TEXT"]
+    .flatMap { $0.isEmpty ? nil : $0 } ?? expectedText
 
 private func environmentInteger(_ name: String, defaultValue: Int, minimum: Int) -> Int {
     guard let text = ProcessInfo.processInfo.environment[name],
@@ -409,6 +411,65 @@ private func typeAnnyeonghaseyoWordsSequence(
     Thread.sleep(forTimeInterval: TimeInterval(idleMilliseconds) / 1000.0)
 }
 
+private func typeRomanTextSequence(
+    text: String,
+    keyboard: KeyboardDriver,
+    delays: SeededDelayGenerator,
+    observerPort: Int?
+) throws {
+    print("Typing Confluence Roman sequence. Expected visible text contains: \(String(reflecting: text))")
+    try verifyHisleCLIMode("roman", stage: "Confluence Roman text initial mode")
+    try placeObserverCaretIfRequested(observerPort: observerPort)
+    Thread.sleep(forTimeInterval: 0.3)
+
+    for keyCode in try keyCodesForVisibleRomanText(text) {
+        try tapKey(keyCode, keyboard: keyboard, delays: delays)
+    }
+
+    Thread.sleep(forTimeInterval: TimeInterval(idleMilliseconds) / 1000.0)
+}
+
+private func keyCodesForVisibleRomanText(_ text: String) throws -> [CGKeyCode] {
+    let keyCodesByVisibleCharacter: [Character: CGKeyCode] = [
+        "a": KeyCode.repA,
+        "b": KeyCode.repB,
+        "c": KeyCode.repC,
+        "d": KeyCode.repG,
+        "e": KeyCode.repK,
+        "f": KeyCode.repE,
+        "g": KeyCode.repT,
+        "h": KeyCode.repH,
+        "i": KeyCode.repL,
+        "j": KeyCode.repY,
+        "k": KeyCode.repN,
+        "l": KeyCode.repU,
+        "m": KeyCode.repM,
+        "n": KeyCode.repJ,
+        "o": KeyCode.semicolon,
+        "p": KeyCode.repR,
+        "q": KeyCode.repQ,
+        "r": KeyCode.repS,
+        "s": KeyCode.repD,
+        "t": KeyCode.repF,
+        "u": KeyCode.repI,
+        "v": KeyCode.repV,
+        "w": KeyCode.repW,
+        "x": KeyCode.repX,
+        "y": KeyCode.repO,
+        "z": KeyCode.repZ,
+        " ": KeyCode.space
+    ]
+
+    return try text.map { character in
+        guard let keyCode = keyCodesByVisibleCharacter[character] else {
+            throw GuiTestFailure.message(
+                "Unsupported HISLE_ATLASSIAN_ROMAN_TEXT character: \(String(reflecting: String(character)))"
+            )
+        }
+        return keyCode
+    }
+}
+
 private func placeObserverCaretIfRequested(observerPort: Int?) throws {
     guard !initialCaretOffset.isEmpty else {
         return
@@ -469,6 +530,45 @@ private func typeAnnyeonghaseyoSyllables(
         KeyCode.repJ, KeyCode.four
     ] {
         try tapKey(keyCode, keyboard: keyboard, delays: delays)
+    }
+}
+
+private func runAtlassianScenario(
+    keyboard: KeyboardDriver,
+    delays: SeededDelayGenerator,
+    observerPort: Int?
+) throws {
+    switch atlassianScenario {
+    case "annyeonghaseyo":
+        try typeAnnyeonghaseyoSequence(
+            keyboard: keyboard,
+            delays: delays,
+            hangulAlreadySelected: false,
+            observerPort: observerPort
+        )
+    case "annyeonghaseyo-words":
+        try typeAnnyeonghaseyoWordsSequence(
+            keyboard: keyboard,
+            delays: delays,
+            hangulAlreadySelected: false,
+            observerPort: observerPort
+        )
+    case "roman-foo-bar":
+        try typeRomanTextSequence(
+            text: "foo bar foo bar",
+            keyboard: keyboard,
+            delays: delays,
+            observerPort: observerPort
+        )
+    case "roman-text":
+        try typeRomanTextSequence(
+            text: atlassianRomanText,
+            keyboard: keyboard,
+            delays: delays,
+            observerPort: observerPort
+        )
+    default:
+        throw GuiTestFailure.message("Unsupported HISLE_ATLASSIAN_SCENARIO: \(atlassianScenario)")
     }
 }
 
@@ -571,24 +671,11 @@ private func runAtlassianDriver() throws {
         try verifyHisleCLIMode("roman", stage: "Confluence editor-focus Roman initialization")
     }
 
-    switch atlassianScenario {
-    case "annyeonghaseyo":
-        try typeAnnyeonghaseyoSequence(
-            keyboard: keyboard,
-            delays: delays,
-            hangulAlreadySelected: false,
-            observerPort: observerReady.observerPort
-        )
-    case "annyeonghaseyo-words":
-        try typeAnnyeonghaseyoWordsSequence(
-            keyboard: keyboard,
-            delays: delays,
-            hangulAlreadySelected: false,
-            observerPort: observerReady.observerPort
-        )
-    default:
-        throw GuiTestFailure.message("Unsupported HISLE_ATLASSIAN_SCENARIO: \(atlassianScenario)")
-    }
+    try runAtlassianScenario(
+        keyboard: keyboard,
+        delays: delays,
+        observerPort: observerReady.observerPort
+    )
     try keyLogger.throwIfFailed()
     writeRuntimeIdentityLog(
         to: options.runDirectory.appendingPathComponent("runtime-identity.log"),

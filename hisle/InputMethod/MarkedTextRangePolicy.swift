@@ -22,7 +22,7 @@ struct PendingMarkedTextReplacement {
 }
 
 enum MarkedTextRangePolicy {
-    static let policyID = "current-selection-nsnotfound+owned-post-insert-caret"
+    static let policyID = "current-selection-nsnotfound+owned-marked-continuation"
 
     static var currentSelectionReplacementRange: NSRange {
         NSRange(location: NSNotFound, length: 0)
@@ -62,15 +62,6 @@ enum MarkedTextRangePolicy {
                 selectedRange: selectedRange,
                 markedRange: markedRange,
                 reason: .ownedMarked
-            )
-        }
-
-        if !hasMarkedText, let ownedInsertionRange {
-            return MarkedTextReplacementDecision(
-                replacementRange: ownedInsertionRange,
-                selectedRange: selectedRange,
-                markedRange: markedRange,
-                reason: .ownedInsertion
             )
         }
 

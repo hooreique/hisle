@@ -316,6 +316,9 @@ Useful environment options:
   set, the final assertion checks the full expected Range text, not only
   whether the inserted substring appears somewhere. The artifact still records
   the editor's visible `innerText` separately as `value`.
+- `HISLE_ATLASSIAN_STRICT_FULL_TEXT=1`, require the same full expected Range
+  text assertion even when the caret offset is auto-discovered rather than
+  explicitly configured.
 - `HISLE_ATLASSIAN_EDIT=0`, require the page to already be in edit mode.
 - `HISLE_ATLASSIAN_EXPECTED_TEXT`, final text substring expected in the editor;
   the driver sequence currently types the default `안녕하세요`.
@@ -323,6 +326,10 @@ Useful environment options:
   `안녕하세요` words separated by spaces. Combine with
   `HISLE_ATLASSIAN_WORD_COUNT`, default `3`, to reproduce cursor jumps during
   ordinary multi-word Hangul input.
+- `HISLE_ATLASSIAN_SCENARIO=roman-foo-bar`, type visible Roman text
+  `foo bar foo bar` through hisle Roman mode.
+- `HISLE_ATLASSIAN_SCENARIO=roman-text` with `HISLE_ATLASSIAN_ROMAN_TEXT`,
+  type a custom visible lowercase Roman text string through hisle Roman mode.
 - `HISLE_ATLASSIAN_HANGUL_BEFORE_EDITOR_CLICK=1`, select Hangul mode before
   focusing the Confluence editor. Use this to verify the intended fresh
   app/client Roman-mode initialization and to observe cursor placement at the

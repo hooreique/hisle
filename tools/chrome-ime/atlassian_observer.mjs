@@ -25,6 +25,7 @@ const allowMismatch = process.env.HISLE_ATLASSIAN_ALLOW_MISMATCH === '1';
 const editorTimeoutMilliseconds = numberFromEnv('HISLE_ATLASSIAN_EDITOR_TIMEOUT_MS', 90000);
 const configuredWindowTitleContains = process.env.HISLE_ATLASSIAN_WINDOW_TITLE_CONTAINS ?? '';
 const initialCaretOffsetText = process.env.HISLE_ATLASSIAN_INITIAL_CARET_OFFSET ?? '';
+const strictFullText = initialCaretOffsetText !== '' || process.env.HISLE_ATLASSIAN_STRICT_FULL_TEXT === '1';
 const readyFile = path.join(runDir, 'observer-ready.json');
 const pidFile = path.join(runDir, 'observer.pid');
 
@@ -953,7 +954,7 @@ async function finalize({ reason, driverExitCode }) {
   await writeJSONLines(path.join(runDir, 'dom-events.jsonl'), domEvents);
   await writeJSONLines(path.join(runDir, 'console.jsonl'), consoleRecords);
 
-  const finalState = page ? await page.evaluate(({ expected }) => {
+  const finalState = page ? await page.evaluate(({ expected, strictFullText }) => {
     const state = window.__hisleAtlassian;
     const target = state?.target ?? null;
     const value = target ? (target.innerText ?? target.textContent ?? '') : '';
@@ -965,7 +966,7 @@ async function finalize({ reason, driverExitCode }) {
     const initialText = state?.initial_text ?? '';
     const initialRangeText = state?.initial_range_text ?? initialText;
     const initialCaretOffset = state?.initial_caret_offset ?? null;
-    const expectedFullText = Number.isInteger(initialCaretOffset)
+    const expectedFullText = strictFullText && Number.isInteger(initialCaretOffset)
       ? initialRangeText.slice(0, initialCaretOffset) + expected + initialRangeText.slice(initialCaretOffset)
       : null;
     const active = document.activeElement;
@@ -996,7 +997,7 @@ async function finalize({ reason, driverExitCode }) {
       beforeinput_event_count: state?.events?.filter((event) => event.event_type === 'beforeinput').length ?? 0,
       target_descriptor: state?.target_descriptor ?? null,
     };
-  }, { expected: expectedText }).catch((error) => ({
+  }, { expected: expectedText, strictFullText }).catch((error) => ({
     wall_clock_timestamp: new Date().toISOString(),
     value: '',
     initial_text: '',
