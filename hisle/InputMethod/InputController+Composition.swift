@@ -74,6 +74,7 @@ extension InputController {
         client: IMKTextInput,
         traceAction: String = "insert"
     ) -> NSRange {
+        let wasMarkedTextActive = markedText.isActive
         let replacementRange = replacementRange(for: client)
 #if DEBUG
         ClientRangeTracer(logger: logger).traceClientRanges(
@@ -87,6 +88,7 @@ extension InputController {
         markedTextRangeTracker.recordCommittedText(
             replacementRange: replacementRange,
             committedLength: text.utf16.count,
+            wasMarkedTextActive: wasMarkedTextActive,
             client: client
         )
         markedText.clear()

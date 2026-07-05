@@ -28,18 +28,32 @@ and the next marked-text update after a commit.
 The new policy keeps using `NSRange(location: NSNotFound, length: 0)` for
 ordinary current-selection insertion, including Roman-mode committed text with
 no active marked text. It tracks the marked range and collapsed insertion range
-created by `hisle`'s own composition updates and commits, then uses those owned
-ranges for later marked updates, composition commits, whitespace that flushes an
-active composition, and the next marked-text start. It clears the owned range on
-mouse down, host-forwarded action keys, mode changes, deactivation, and external
-cancel/commit boundaries.
+created by `hisle`'s own marked-text updates and composition commits, then uses
+those owned ranges for later marked updates, composition commits, whitespace
+that flushes an active composition, and the next marked-text start. It clears
+the owned range on mouse down, host-forwarded action keys, mode changes,
+deactivation, external cancel/commit boundaries, and plain committed text that
+did not replace active marked text.
 
 The important middle-insertion correction is that the tracker now prefers a
-valid collapsed `selectedRange()` observed immediately after
-`insertText(_:replacementRange:)` as the next insertion point. Confluence can
-remap IMK coordinates after a commit; continuing by adding the committed length
-to the pre-commit replacement range can point back into earlier document
-content.
+valid collapsed `selectedRange()` observed immediately after an active
+composition commit as the next insertion point. Confluence can remap IMK
+coordinates after a commit; continuing by adding the committed length to the
+pre-commit replacement range can point back into earlier document content. A
+later Firefox textarea prefix regression confirmed this post-insert selection
+must not be trusted for plain current-selection commits with no active marked
+text.
+
+Firefox textarea follow-up on 2026-07-05 narrowed the policy further. The
+Confluence fix had been correct to preserve an owned insertion point after
+active composition commits, but the first implementation let plain committed
+text update that owned insertion point too. Firefox can report a stale
+collapsed `selectedRange()` immediately after current-selection `insertText`,
+so typing before existing textarea text could make the next marked text start
+before the previous committed character. Build 14 fixes that by clearing the
+owned insertion range for plain commits with no active marked text and keeping
+post-commit continuation only for composition commits. The detailed Firefox
+record is in `bugfix/firefox-prefix-textarea/`.
 
 Runtime identity for the verified build:
 

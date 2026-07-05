@@ -140,11 +140,13 @@ Useful environment options:
   `idle-stress`, `midline-insert`, `two-insert-move`,
   `active-move-continue`, `click-move-continue`, `drag-selection-input`,
   `selected-range-input`, `selected-range-numbers`,
-  `selected-range-annyeonghaseyo`, `stale-selection-annyeonghaseyo`, or
-  `double-click-selection-annyeonghaseyo`; `selected-range-annyeonghaseyo` is a
-  focused selected-text regression repro, `stale-selection-annyeonghaseyo`
-  combines default contenteditable text, double-click selection, stale
-  selection restoration, and expected final value `안녕하세요`, and
+  `selected-range-annyeonghaseyo`, `stale-selection-annyeonghaseyo`,
+  `annyeong-words`, or `double-click-selection-annyeonghaseyo`;
+  `selected-range-annyeonghaseyo` is a focused selected-text regression repro,
+  `stale-selection-annyeonghaseyo` combines default contenteditable text,
+  double-click selection, stale selection restoration, and expected final value
+  `안녕하세요`, `annyeong-words` types `안 녕 안 녕` through real Hangul
+  composition for prefix-insertion regressions with existing textarea text, and
   `double-click-selection-annyeonghaseyo` double-clicks the
   `HISLE_CHROME_INITIAL_CARET` point before typing; default `standard`.
 - `HISLE_CHROME_EDITOR_CHAOS`, optional WYSIWYG editor maintenance simulation:

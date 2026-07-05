@@ -22,7 +22,7 @@ struct PendingMarkedTextReplacement {
 }
 
 enum MarkedTextRangePolicy {
-    static let policyID = "current-selection-nsnotfound+owned-marked-continuation"
+    static let policyID = "current-selection-nsnotfound+owned-composition-continuation"
 
     static var currentSelectionReplacementRange: NSRange {
         NSRange(location: NSNotFound, length: 0)
@@ -139,11 +139,17 @@ struct MarkedTextRangeTracker {
     mutating func recordCommittedText(
         replacementRange: NSRange,
         committedLength: Int,
+        wasMarkedTextActive: Bool,
         client: IMKTextInput
     ) {
         markedRange = nil
 
         guard committedLength > 0 else {
+            return
+        }
+
+        guard wasMarkedTextActive else {
+            insertionRange = nil
             return
         }
 

@@ -120,21 +120,22 @@ editor clients can report stale or restored selections across IMK composition
 boundaries.
 
 While `hisle` owns an active marked text sequence, it tracks the marked range
-and the collapsed insertion range created by its own updates and commits. Use
-the owned marked range for replacing active marked text, and use the owned
-collapsed insertion range only to place the next marked-text update after a
-commit. Ordinary committed text with no active marked text must still use the
-current-selection sentinel, because some rich editors report unstable explicit
-document ranges during plain Roman input. Clear owned ranges on user or host
-actions that can legitimately move the caret: mouse down, host-forwarded
-navigation/action keys, mode changes, deactivation, and external cancel/commit
-boundaries.
+and the collapsed insertion range created by its own marked-text updates and
+composition commits. Use the owned marked range for replacing active marked
+text, and use the owned collapsed insertion range only to place the next
+marked-text update after a composition commit. Ordinary committed text with no
+active marked text must still use the current-selection sentinel and must not
+create or preserve an owned insertion range, because browser and rich-editor
+clients can report unstable explicit document ranges during plain Roman or
+standalone punctuation input. Clear owned ranges on user or host actions that
+can legitimately move the caret: mouse down, host-forwarded navigation/action
+keys, mode changes, deactivation, and external cancel/commit boundaries.
 
-After `insertText(_:replacementRange:)`, prefer a valid collapsed
-`selectedRange()` from the client as the next owned insertion point. Some hosts
-remap IMK coordinates after a commit; deriving continuation by arithmetic from
-the pre-commit replacement range can point at the wrong document position in
-the middle of rich editor content.
+After `insertText(_:replacementRange:)` for an active composition commit,
+prefer a valid collapsed `selectedRange()` from the client as the next owned
+insertion point. Some hosts remap IMK coordinates after a commit; deriving
+continuation by arithmetic from the pre-commit replacement range can point at
+the wrong document position in the middle of rich editor content.
 
 Keep this policy app-agnostic. Do not add Confluence, Chromium, or editor-name
 branches unless a later bug proves that a general IMK range policy is
