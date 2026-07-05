@@ -27,6 +27,9 @@ Mode selection is absolute selection, not a toggle.
 
 - When the input method starts fresh or no explicit mode has been selected yet,
   it starts in Roman mode.
+- When focus moves to a different host app or a newly activated IMK text
+  client/session, `hisle` does not preserve a previous Hangul selection for
+  that new context; it enters Roman mode.
 - When the user switches away to another input method and later selects the
   `hisle` visible input mode again, `hisle` enters Roman mode even if the
   previous `hisle` mode was Hangul mode.
@@ -34,10 +37,11 @@ Mode selection is absolute selection, not a toggle.
 - A right Shift single tap selects Hangul mode.
 - Selecting the already active mode does nothing.
 
-Input mode is user state that applies to `hisle` as a whole. Composition buffers
-and marked text stay client/session-local, but the selected mode is shared
-between `hisle` controllers unless a later macOS integration issue requires a
-narrower scope.
+Input mode is active editing-context state, not a durable global preference.
+Composition buffers and marked text stay client/session-local. The selected mode
+may be shared while a client/session remains active, but Hangul mode must not be
+relied on to persist across host app switches, newly activated text clients, or
+input-source round trips.
 
 ## Shift Single Tap
 
@@ -73,6 +77,8 @@ Mode changes are explicit composition boundaries.
   composition state into Hangul mode.
 - When `hisle` is deactivated because the user switched to another input method,
   flush any active Hangul composition.
+- Activating a new host app or IMK text client/session is a fresh Roman-mode
+  boundary.
 - Returning to `hisle` from another input method is a composition boundary
   equivalent to selecting Roman mode.
 - Mode selection itself must not emit a Shift character.

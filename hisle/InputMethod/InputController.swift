@@ -18,7 +18,9 @@ final class InputController: IMKInputController {
 #endif
     var hangulEngine = InputController.makeEngine()
     var markedText = MarkedTextState()
-    var pendingMarkedTextReplacementRange: NSRange?
+    var markedTextRangeTracker = MarkedTextRangeTracker()
+    var pendingMarkedTextReplacement: PendingMarkedTextReplacement?
+    var lastUpdateCompositionReplacementRange: NSRange?
     var shiftTap = ShiftTapDetector()
     let keyClassifier = InputKeyClassifier()
 
@@ -44,6 +46,7 @@ final class InputController: IMKInputController {
 
     override func deactivateServer(_ sender: Any!) {
         flushBeforeForwarding(to: sender)
+        markedTextRangeTracker.clear()
         shiftTap = ShiftTapDetector()
         super.deactivateServer(sender)
     }
@@ -76,6 +79,7 @@ final class InputController: IMKInputController {
         client sender: Any
     ) -> Bool {
         flushBeforeForwarding(to: sender)
+        markedTextRangeTracker.clear()
         return false
     }
 
@@ -122,23 +126,27 @@ final class InputController: IMKInputController {
 
     @objc override func commitComposition(_ sender: Any!) {
         _ = apply(hangulEngine.process(.flush), to: sender)
+        markedTextRangeTracker.clear()
     }
 
     override func cancelComposition() {
         _ = apply(hangulEngine.process(.clear), to: client())
+        markedTextRangeTracker.clear()
     }
 
     @objc override func updateComposition() {
+        lastUpdateCompositionReplacementRange = nil
         defer {
-            pendingMarkedTextReplacementRange = nil
+            pendingMarkedTextReplacement = nil
         }
         super.updateComposition()
     }
 
     @objc override func replacementRange() -> NSRange {
         let (replacementRange, reason) = MarkedTextRangePolicy.updateCompositionReplacementDecision(
-            pendingMarkedTextReplacementRange: pendingMarkedTextReplacementRange
+            pendingMarkedTextReplacement: pendingMarkedTextReplacement
         )
+        lastUpdateCompositionReplacementRange = replacementRange
 #if DEBUG
         ClientRangeTracer(logger: logger).traceUpdateCompositionReplacementRange(
             replacementRange,

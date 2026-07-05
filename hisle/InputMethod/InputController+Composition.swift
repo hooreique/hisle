@@ -34,10 +34,11 @@ extension InputController {
             let replacementRange = insertCommittedText(output.committedText, client: client, traceAction: "commit")
 
             if !output.markedText.isEmpty {
-                pendingMarkedTextReplacementRange = MarkedTextRangePolicy.continuationRange(
+                pendingMarkedTextReplacement = markedTextRangeTracker.replacementForMarkedTextUpdate(
+                    wasMarkedTextActive: false
+                ) ?? MarkedTextRangePolicy.continuationReplacement(
                     afterReplacing: replacementRange,
-                    withCommittedText: output.committedText,
-                    client: client
+                    withCommittedText: output.committedText
                 )
             }
         }
@@ -83,6 +84,11 @@ extension InputController {
         )
 #endif
         client.insertText(text, replacementRange: replacementRange)
+        markedTextRangeTracker.recordCommittedText(
+            replacementRange: replacementRange,
+            committedLength: text.utf16.count,
+            client: client
+        )
         markedText.clear()
 #if DEBUG
         ClientRangeTracer(logger: logger).traceClientRanges(
@@ -95,6 +101,13 @@ extension InputController {
     }
 
     private func updateMarkedText(_ text: String, client: IMKTextInput) {
+        let wasMarkedTextActive = markedText.isActive
+        if pendingMarkedTextReplacement == nil {
+            pendingMarkedTextReplacement = markedTextRangeTracker.replacementForMarkedTextUpdate(
+                wasMarkedTextActive: wasMarkedTextActive
+            )
+        }
+
         markedText.replace(with: text)
 #if DEBUG
         ClientRangeTracer(logger: logger).traceClientRanges(
@@ -104,6 +117,13 @@ extension InputController {
         )
 #endif
         updateComposition()
+        let replacementRange = lastUpdateCompositionReplacementRange
+            ?? MarkedTextRangePolicy.currentSelectionReplacementRange
+        markedTextRangeTracker.recordMarkedTextUpdate(
+            replacementRange: replacementRange,
+            markedLength: text.utf16.count,
+            client: client
+        )
 #if DEBUG
         ClientRangeTracer(logger: logger).traceClientRanges(
             "after-update-composition markedLength=\(text.utf16.count)",
@@ -114,6 +134,12 @@ extension InputController {
     }
 
     private func clearMarkedText(client: IMKTextInput) {
+        if pendingMarkedTextReplacement == nil {
+            pendingMarkedTextReplacement = markedTextRangeTracker.replacementForMarkedTextUpdate(
+                wasMarkedTextActive: true
+            )
+        }
+
         markedText.clear()
 #if DEBUG
         ClientRangeTracer(logger: logger).traceClientRanges(
@@ -123,6 +149,7 @@ extension InputController {
         )
 #endif
         updateComposition()
+        markedTextRangeTracker.recordMarkedTextClear(client: client)
 #if DEBUG
         ClientRangeTracer(logger: logger).traceClientRanges(
             "after-clear-composition",
@@ -135,6 +162,8 @@ extension InputController {
     private func replacementRange(for client: IMKTextInput) -> NSRange {
         let decision = MarkedTextRangePolicy.replacementDecision(
             hasMarkedText: markedText.isActive,
+            ownedMarkedRange: markedTextRangeTracker.markedRange,
+            ownedInsertionRange: markedTextRangeTracker.insertionRange,
             client: client
         )
 #if DEBUG

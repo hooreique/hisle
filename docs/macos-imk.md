@@ -111,7 +111,32 @@ Debug builds can opt into noisy IMK client range traces with the
 Release builds must not emit these traces. Keep any Release logging limited to
 sparse lifecycle or unexpected fallback events.
 
+## Marked Text Range Policy
+
+For ordinary current-selection insertion, use
+`NSRange(location: NSNotFound, length: 0)` instead of converting
+`selectedRange()` into an explicit document range. Some browser and custom
+editor clients can report stale or restored selections across IMK composition
+boundaries.
+
+While `hisle` owns an active marked text sequence, it tracks the marked range
+and the collapsed insertion range created by its own updates and commits. Use
+that owned range for the next marked-text update or same typing-burst committed
+text, and clear it on user or host actions that can legitimately move the caret:
+mouse down, host-forwarded navigation/action keys, mode changes, deactivation,
+and external cancel/commit boundaries.
+
+After `insertText(_:replacementRange:)`, prefer a valid collapsed
+`selectedRange()` from the client as the next owned insertion point. Some hosts
+remap IMK coordinates after a commit; deriving continuation by arithmetic from
+the pre-commit replacement range can point at the wrong document position in
+the middle of rich editor content.
+
+Keep this policy app-agnostic. Do not add Confluence, Chromium, or editor-name
+branches unless a later bug proves that a general IMK range policy is
+insufficient.
+
 ## References
 
 - Use `../gureum` (https://github.com/gureum/gureum) as the reference for app
-  implementation and InputMethodKit behavior.
+implementation and InputMethodKit behavior.

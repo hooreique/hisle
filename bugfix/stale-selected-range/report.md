@@ -32,6 +32,10 @@ The strong Chrome fixture now passes with installed `hisle 0.1.2-debug`,
 build `5`, and runtime policy
 `current-selection-nsnotfound+marked-continuation`.
 
+The later Confluence cursor-jump fix extends this same policy family to
+`current-selection-nsnotfound+owned-post-insert-caret`; the selected-range
+behavior described here is still part of the current policy.
+
 ## User-Visible Shape
 
 Observed failure family:

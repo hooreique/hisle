@@ -43,6 +43,7 @@ extension InputController {
             flushBeforeForwarding(to: sender)
         }
 
+        markedTextRangeTracker.clear()
         inputMode = mode
 #if DEBUG
         logger.debug("input mode selected \(mode.description, privacy: .public)")
@@ -52,6 +53,7 @@ extension InputController {
 
     func selectRomanModeForInputSourceSelection(client sender: Any?) {
         shiftTap = ShiftTapDetector()
+        markedTextRangeTracker.clear()
         _ = selectInputMode(.roman, client: sender)
     }
 
@@ -61,15 +63,21 @@ extension InputController {
             return selectInputMode(mode, client: sender, handled: handled)
         case .forwardToHost:
             flushBeforeForwarding(to: sender)
+            markedTextRangeTracker.clear()
             return false
         case let .whitespace(scalar):
             return handleWhitespace(scalar, client: sender)
         case .deleteBackward:
             guard inputMode == .hangul else {
                 flushBeforeForwarding(to: sender)
+                markedTextRangeTracker.clear()
                 return false
             }
-            return process(.backspace, client: sender)
+            let handled = process(.backspace, client: sender)
+            if !handled {
+                markedTextRangeTracker.clear()
+            }
+            return handled
         case let .representativeKey(representativeKey):
             return handleRepresentativeKey(representativeKey, client: sender)
         case let .fallbackText(text):

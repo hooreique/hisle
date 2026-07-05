@@ -18,7 +18,7 @@ SWIFTLINT ?= swiftlint
 XCODEBUILD_ENV := env -u CC -u CXX -u LD -u SDKROOT -u NIX_CC -u NIX_CFLAGS_COMPILE -u NIX_CFLAGS_LINK -u NIX_LDFLAGS
 XCODEBUILD := $(XCODEBUILD_ENV) /usr/bin/xcodebuild
 
-.PHONY: all help require-nix-shell require-app-shell require-default-shell require-core-shell require-browser-shell require-icon-shell build dmg install-debug uninstall clean icons check-toolchain version-check swiftlint core-spec-check gui-smoke-test chrome-ime-repro
+.PHONY: all help require-nix-shell require-app-shell require-default-shell require-core-shell require-browser-shell require-icon-shell build dmg install-debug uninstall clean icons check-toolchain version-check swiftlint core-spec-check gui-smoke-test chrome-ime-repro atlassian-confluence-login atlassian-confluence-repro
 
 all: help
 
@@ -35,6 +35,8 @@ help:
 	@echo '    nix develop --command -- make gui-smoke-test'
 	@echo '    nix develop .#core --command -- make core-spec-check'
 	@echo '    nix develop .#browser --command -- make chrome-ime-repro'
+	@echo '    nix develop .#browser --command -- make atlassian-confluence-login'
+	@echo '    nix develop .#browser --command -- make atlassian-confluence-repro'
 	@echo '    nix develop .#icon --command -- make icons'
 
 require-nix-shell:
@@ -43,6 +45,7 @@ require-nix-shell:
 		echo '    nix develop --command -- make <target>' >&2; \
 		echo '    nix develop .#core --command -- make core-spec-check' >&2; \
 		echo '    nix develop .#browser --command -- make chrome-ime-repro' >&2; \
+		echo '    nix develop .#browser --command -- make atlassian-confluence-repro' >&2; \
 		echo '    nix develop .#icon --command -- make icons' >&2; \
 		exit 1; \
 	fi
@@ -53,6 +56,7 @@ require-app-shell: require-nix-shell
 		*) echo 'Run this target from the app/browser Nix dev shell:' >&2; \
 		   echo '    nix develop --command -- make <target>' >&2; \
 		   echo '    nix develop .#browser --command -- make chrome-ime-repro' >&2; \
+		   echo '    nix develop .#browser --command -- make atlassian-confluence-repro' >&2; \
 		   exit 1 ;; \
 	esac
 
@@ -74,6 +78,7 @@ require-browser-shell: require-nix-shell
 	@if [ "$$HISLE_DEV_SHELL" != 'browser' ]; then \
 		echo 'Run this target from the browser Nix dev shell:' >&2; \
 		echo '    nix develop .#browser --command -- make chrome-ime-repro' >&2; \
+		echo '    nix develop .#browser --command -- make atlassian-confluence-repro' >&2; \
 		exit 1; \
 	fi
 
@@ -140,6 +145,12 @@ gui-smoke-test: require-app-shell install-debug
 
 chrome-ime-repro: require-browser-shell install-debug
 	$(NU) tools/chrome_ime_repro.nu
+
+atlassian-confluence-login: require-browser-shell
+	HISLE_ATLASSIAN_LOGIN_ONLY=1 $(NU) tools/atlassian_confluence_repro.nu
+
+atlassian-confluence-repro: require-browser-shell install-debug
+	$(NU) tools/atlassian_confluence_repro.nu
 
 uninstall: require-app-shell
 	$(NU) tools/uninstall.nu

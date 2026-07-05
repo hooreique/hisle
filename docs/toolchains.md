@@ -70,7 +70,7 @@ Use these shell routes:
 | --- | --- | --- |
 | `hisle` app, Xcode builds, install, packaging, GUI smoke tests | `default` | `nix develop --command -- make build` |
 | `hisle-core` pure SwiftPM work | `core` | `nix develop .#core --command -- make core-spec-check` |
-| Chrome/Playwright IME diagnostics | `browser` | `nix develop .#browser --command -- make chrome-ime-repro` |
+| Chrome/Playwright IME diagnostics and Atlassian Confluence live repros | `browser` | `nix develop .#browser --command -- make chrome-ime-repro` |
 | Icon rendering | `icon` | `nix develop .#icon --command -- make icons` |
 
 For interactive work, enter the owning shell once, such as `nix develop` or
@@ -167,11 +167,12 @@ because `xcode-select` points at Command Line Tools, rerun the command through
 The `core` shell is for pure `hisle-core` SwiftPM work. It includes Nushell,
 Swift, and SwiftPM, and does not set `DEVELOPER_DIR`.
 
-The `browser` shell is for Chrome IME diagnostics. It includes the default
-app/Xcode tools plus Node.js/npm so `tools/chrome_ime_repro.nu` can install and
-run the Playwright observer. It also intentionally avoids Nix Swift because the
-Chrome HID driver imports macOS frameworks and is compiled with Xcode's
-`xcrun swiftc`.
+The `browser` shell is for Chrome IME diagnostics and Atlassian Confluence live
+repros. It includes the default app/Xcode tools plus Node.js/npm so
+`tools/chrome_ime_repro.nu` and `tools/atlassian_confluence_repro.nu` can
+install and run their Playwright observers. It also intentionally avoids Nix
+Swift because the browser HID drivers import macOS frameworks and are compiled
+with Xcode's `xcrun swiftc`.
 
 The `icon` shell is for icon rendering. It includes Nushell, `resvg`, and
 ImageMagick.

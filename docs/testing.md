@@ -244,6 +244,113 @@ Triage guide:
   Chrome/macOS/browser interaction.
 - Good DOM events followed by later value mutation points at page JavaScript.
 
+## Atlassian Confluence Live Reproduction
+
+Use this when the behavior must be checked against a real Confluence Cloud page
+instead of the local Chrome IME fixture. The test uses a separate persistent
+Chrome profile under `local/atlassian/chrome-profile/` so Atlassian cookies and
+site data survive across runs. Artifacts are written under
+`local/atlassian/runs/<run-id>/`. The whole `local/` tree is ignored by Git and
+can contain private session data.
+
+Configure the target page with either `ATLASSIAN_CONFLUENCE_URL` or
+`local/atlassian/config.json`:
+
+```json
+{
+  "page_url": "https://<site>.atlassian.net/wiki/spaces/<space>/pages/<page>/<title>",
+  "email": "<optional login email>"
+}
+```
+
+The older `local/atlassianinfo` form, `<site> <email>`, is still accepted as a
+fallback for opening the site, but use `page_url` for the live-page repro so the
+observer can navigate directly to the test page.
+
+First create or refresh the browser login session:
+
+```sh
+nix develop .#browser --command -- make atlassian-confluence-login
+```
+
+This opens normal Chrome, not a Playwright-controlled browser, with the
+persistent Atlassian profile. Complete the normal Atlassian login and email
+verification in the browser, wait until the target page is usable, then quit
+that Chrome instance with Command-Q so the profile can be reused by the repro.
+The script does not automate login or bypass verification; it only preserves
+the resulting browser state for later runs.
+
+Some Atlassian login policies can still ask for a fresh login when the repro
+opens Chrome with a remote debugging port. If the repro stops on the Atlassian
+login page, complete that login in the Chrome window it opened, leave the window
+open, and rerun the script against the same remote debugging port:
+
+```sh
+env \
+  HISLE_ATLASSIAN_REUSE_CHROME=1 \
+  CHROME_REMOTE_DEBUGGING_PORT=<port> \
+  nix develop .#browser --command -- nu tools/atlassian_confluence_repro.nu
+```
+
+Run the live Confluence repro:
+
+```sh
+nix develop .#browser --command -- make atlassian-confluence-repro
+```
+
+The target builds and installs the debug input method, opens the configured
+Confluence page with the persistent profile, clicks the page Edit action when an
+editor is not already open, focuses the first usable editor `contenteditable`,
+selects `hisle`, and types `안녕하세요` through the Swift HID driver. It does not
+publish the page. Use a disposable Confluence page because the editor can still
+autosave drafts.
+
+Useful environment options:
+
+- `ATLASSIAN_CONFLUENCE_URL` or `HISLE_ATLASSIAN_URL`, target page URL.
+- `HISLE_ATLASSIAN_PROFILE_DIR`, override the persistent Chrome profile path.
+- `HISLE_ATLASSIAN_TARGET_SELECTOR`, CSS selector for the editor if automatic
+  detection picks the wrong `contenteditable`.
+- `HISLE_ATLASSIAN_INITIAL_CARET_OFFSET`, optional text offset for the initial
+  Confluence caret. Use a non-negative DOM Range text offset or `middle`; when
+  set, the final assertion checks the full expected Range text, not only
+  whether the inserted substring appears somewhere. The artifact still records
+  the editor's visible `innerText` separately as `value`.
+- `HISLE_ATLASSIAN_EDIT=0`, require the page to already be in edit mode.
+- `HISLE_ATLASSIAN_EXPECTED_TEXT`, final text substring expected in the editor;
+  the driver sequence currently types the default `안녕하세요`.
+- `HISLE_ATLASSIAN_SCENARIO=annyeonghaseyo-words`, type repeated
+  `안녕하세요` words separated by spaces. Combine with
+  `HISLE_ATLASSIAN_WORD_COUNT`, default `3`, to reproduce cursor jumps during
+  ordinary multi-word Hangul input.
+- `HISLE_ATLASSIAN_HANGUL_BEFORE_EDITOR_CLICK=1`, select Hangul mode before
+  focusing the Confluence editor. Use this to verify the intended fresh
+  app/client Roman-mode initialization and to observe cursor placement at the
+  start of editing.
+- `HISLE_ATLASSIAN_KEEP_OPEN=1`, leave Chrome open after artifact capture.
+- `HISLE_ATLASSIAN_ALLOW_MISMATCH=1`, keep the run successful while preserving
+  the observed mismatch in artifacts.
+- `CHROME_PATH`, optional path to Chrome or Chrome for Testing.
+- `CHROME_REMOTE_DEBUGGING_PORT`, optional fixed Chrome remote debugging port.
+- `HISLE_ATLASSIAN_REUSE_CHROME=1`, connect to an already-open Chrome on
+  `CHROME_REMOTE_DEBUGGING_PORT` instead of launching a new one.
+- `RUN_ID`, stable run directory name under `local/atlassian/runs/`.
+
+Artifacts:
+
+- `keys.jsonl`: Swift HID key-down/key-up events.
+- `dom-events.jsonl`: capture-phase DOM keyboard, composition, input, selection,
+  focus, and blur events from the Confluence page.
+- `console.jsonl`: browser console and page-error records.
+- `ime.log`: unified log stream for `hooreique.inputmethod.hisle`.
+- `runtime-identity.log`: post-run unified log snapshot of the running input
+  method app version, bundle path, process id, and replacement policy.
+- `driver-state.json`, `observer-ready.json`, and `environment.json`: run
+  metadata, selected input source, profile path, page URL, and timing data.
+- `final-state.json`: final editor text summary, expected-text match, and event
+  anomaly counters.
+- `screenshot.png` and `trace.zip`: final page screenshot and Playwright trace.
+
 ### Debug Client Range Trace
 
 Debug builds can emit opt-in `IMKTextInput` range traces for cursor and marked
