@@ -26,26 +26,36 @@ text update used the owned range and therefore appeared in the right place. A
 following host-forwarded Backspace used Confluence's real selection and deleted
 the preceding Hangul syllable.
 
+A later attempt split the composition commit and whitespace insertion
+synchronously. That still failed in the exact `foo bar` middle-insertion case:
+Chrome/Confluence accepted the whitespace insertion, then its composition-end
+event restored the DOM selection to the position after `녕` and before the
+space. The root failure was therefore the Space key leaving the real caret
+before the just-inserted whitespace; Backspace deleting `녕` was only the next
+visible symptom.
+
 ## Fix
 
 When active Hangul marked text is closed by a whitespace `FlushThenEmit`
 boundary, split the IMK host operations:
 
 - commit the active composition through the owned marked-text replacement range
-- insert the whitespace separately through the current-selection sentinel
+- schedule the whitespace for the next main-queue turn
+- insert the whitespace through the current-selection sentinel after the host's
+  composition-end selection update has completed
 - advance the owned insertion range by the whitespace length for the next
   marked-text update
 
-This keeps the existing Confluence owned-range continuation while giving the
-host editor a plain whitespace insertion that moves its own caret before a
-later Backspace. The rule is limited to active composition boundaries and does
-not revive owned ranges for ordinary plain commits with no active marked text,
-which was the Firefox prefix regression.
+This keeps the existing Confluence owned-range continuation while making the
+plain whitespace insertion occur after Chrome/Confluence has finished restoring
+selection for the ended composition. The rule is limited to active composition
+boundaries and does not revive owned ranges for ordinary plain commits with no
+active marked text, which was the Firefox prefix regression.
 
 Runtime identity for this policy should include:
 
 ```text
-replacementPolicy=current-selection-nsnotfound+split-boundary+conditional-postcommit-caret
+replacementPolicy=current-selection-nsnotfound+split-boundary+deferred-boundary+conditional-postcommit-caret
 ```
 
 ## Verification
@@ -53,68 +63,41 @@ replacementPolicy=current-selection-nsnotfound+split-boundary+conditional-postco
 Runtime identity from the installed debug build:
 
 ```text
-hisle 0.1.12-debug, build 16
-replacementPolicy=current-selection-nsnotfound+split-boundary+conditional-postcommit-caret
+hisle 0.1.13-debug, build 26
+replacementPolicy=current-selection-nsnotfound+split-boundary+deferred-boundary+conditional-postcommit-caret
 bundle=/Users/kia2964158/Library/Input Methods/hisle.app
 ```
 
-Static and smoke checks passed:
+The exact live Confluence repro passed:
+
+```sh
+env HISLE_ATLASSIAN_REUSE_CHROME=1 CHROME_REMOTE_DEBUGGING_PORT=55934 HISLE_ATLASSIAN_SCENARIO=foo-bar-annyeong-space-backspace HISLE_ATLASSIAN_INITIAL_CARET_OFFSET=middle RUN_ID=confluence-foo-bar-space-deferred-boundary-reuse-20260706 nix develop .#browser --command -- nu tools/atlassian_confluence_repro.nu
+```
+
+Artifact:
+
+```text
+local/atlassian/runs/confluence-foo-bar-space-deferred-boundary-reuse-20260706/
+matches_expected_text: true
+matches_expected_full_text: true
+expected_text: foo안녕 bar
+```
+
+Representative DOM event order from that run:
+
+```text
+compositionend selection_start=161
+space input selection_start=162
+Backspace keydown selection_start=162
+```
+
+Additional checks passed:
 
 ```sh
 nix develop --command -- make swiftlint
-nix develop --command -- make gui-smoke-test
+nix develop .#browser --command -- node --check tools/chrome-ime/atlassian_observer.mjs
+nix develop .#browser --command -- nu --ide-check 0 tools/atlassian_confluence_repro.nu
 nix develop --command -- make version-check
-```
-
-Firefox prefix regression check passed:
-
-```sh
-env HISLE_FIREFOX_SCENARIO='annyeong-word-repeats' HISLE_FIREFOX_TARGET='textarea' HISLE_FIREFOX_INITIAL_TEXT='foo bar' HISLE_FIREFOX_INITIAL_CARET='0' HISLE_FIREFOX_SKIP_FOCUS_CLICK=1 EXPECTED_VALUE='안녕 안녕 안녕 안녕foo bar' RUN_ID='firefox-annyeong-repeats-after-space-backspace-fix' nix develop .#browser --command -- nu tools/firefox_ime_repro.nu
-```
-
-Artifact:
-
-```text
-build/firefox-ime/firefox-annyeong-repeats-after-space-backspace-fix/
-matches_expected_value: true
-actual_value: 안녕 안녕 안녕 안녕foo bar
-```
-
-The new Confluence live Backspace repro passed:
-
-```sh
-env HISLE_ATLASSIAN_SCENARIO=annyeong-space-backspace HISLE_ATLASSIAN_INITIAL_CARET_OFFSET=middle RUN_ID=confluence-space-backspace-fix nix develop .#browser --command -- nu tools/atlassian_confluence_repro.nu
-```
-
-Artifact:
-
-```text
-local/atlassian/runs/confluence-space-backspace-fix/
-matches_expected_text: true
-matches_expected_full_text: true
-expected_text: 안녕
-initial_caret_offset: 955
-```
-
-The existing Confluence middle-insertion multi-word repro also passed after
-reusing the still-open Chrome session from the previous run:
-
-```sh
-env HISLE_ATLASSIAN_REUSE_CHROME=1 CHROME_REMOTE_DEBUGGING_PORT=57299 HISLE_ATLASSIAN_SCENARIO='annyeonghaseyo-words' HISLE_ATLASSIAN_WORD_COUNT='3' HISLE_ATLASSIAN_EXPECTED_TEXT='안녕하세요 안녕하세요 안녕하세요' HISLE_ATLASSIAN_INITIAL_CARET_OFFSET='middle' RUN_ID='confluence-words-middle-after-space-backspace-fix-reuse' nix develop .#browser --command -- nu tools/atlassian_confluence_repro.nu
-```
-
-Artifact:
-
-```text
-local/atlassian/runs/confluence-words-middle-after-space-backspace-fix-reuse/
-matches_expected_text: true
-matches_expected_full_text: true
-expected_text: 안녕하세요 안녕하세요 안녕하세요
-initial_caret_offset: 956
-```
-
-Two earlier attempts to run the same multi-word repro with a fresh Chrome port
-failed before observer readiness because the previous normal Chrome profile
-session was still running on remote debugging port `57299`; the failure was at
-Chrome CDP startup, before the input-method driver ran.
+env HISLE_FIREFOX_SCENARIO='annyeong-word-repeats' HISLE_FIREFOX_TARGET='textarea' HISLE_FIREFOX_INITIAL_TEXT='foo bar' HISLE_FIREFOX_INITIAL_CARET='0' HISLE_FIREFOX_SKIP_FOCUS_CLICK=1 EXPECTED_VALUE='안녕 안녕 안녕 안녕foo bar' RUN_ID='firefox-annyeong-repeats-after-deferred-boundary-fix-20260706' nix develop .#browser --command -- nu tools/firefox_ime_repro.nu
+nix develop --command -- make gui-smoke-test
 ```

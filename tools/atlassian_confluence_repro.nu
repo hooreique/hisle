@@ -74,6 +74,14 @@ def first-non-empty [values: list] {
     ""
 }
 
+def default-expected-text [scenario: string] {
+    match $scenario {
+        "annyeong-space-backspace" => "안녕",
+        "foo-bar-annyeong-space-backspace" => "foo안녕 bar",
+        _ => "안녕하세요",
+    }
+}
+
 def normalize-url [value: string] {
     if ($value | is-empty) {
         ""
@@ -150,7 +158,7 @@ let chrome_path = ($env.CHROME_PATH? | default "")
 let chrome_app = ($env.HISLE_ATLASSIAN_CHROME_APP? | default "Google Chrome")
 let keep_open = ($env.HISLE_ATLASSIAN_KEEP_OPEN? | default "")
 let scenario = ($env.HISLE_ATLASSIAN_SCENARIO? | default "annyeonghaseyo")
-let default_expected_text = if $scenario == "annyeong-space-backspace" { "안녕" } else { "안녕하세요" }
+let default_expected_text = default-expected-text $scenario
 let expected_text = ($env.HISLE_ATLASSIAN_EXPECTED_TEXT? | default $default_expected_text)
 let word_count = ($env.HISLE_ATLASSIAN_WORD_COUNT? | default "")
 let roman_text = ($env.HISLE_ATLASSIAN_ROMAN_TEXT? | default "")

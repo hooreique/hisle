@@ -25,11 +25,22 @@ private let hangulBeforeEditorClick = ProcessInfo.processInfo.environment[
 private let initialCaretOffset = ProcessInfo.processInfo.environment["HISLE_ATLASSIAN_INITIAL_CARET_OFFSET"] ?? ""
 private let atlassianScenario = ProcessInfo.processInfo.environment["HISLE_ATLASSIAN_SCENARIO"] ?? "annyeonghaseyo"
 private let atlassianWordCount = environmentInteger("HISLE_ATLASSIAN_WORD_COUNT", defaultValue: 3, minimum: 1)
-private let defaultExpectedText = atlassianScenario == "annyeong-space-backspace" ? "안녕" : "안녕하세요"
+private let defaultExpectedText = expectedTextForScenario(atlassianScenario)
 private let expectedText = ProcessInfo.processInfo.environment["HISLE_ATLASSIAN_EXPECTED_TEXT"]
     .flatMap { $0.isEmpty ? nil : $0 } ?? defaultExpectedText
 private let atlassianRomanText = ProcessInfo.processInfo.environment["HISLE_ATLASSIAN_ROMAN_TEXT"]
     .flatMap { $0.isEmpty ? nil : $0 } ?? expectedText
+
+private func expectedTextForScenario(_ scenario: String) -> String {
+    switch scenario {
+    case "annyeong-space-backspace":
+        return "안녕"
+    case "foo-bar-annyeong-space-backspace":
+        return "foo안녕 bar"
+    default:
+        return "안녕하세요"
+    }
+}
 
 private func environmentInteger(_ name: String, defaultValue: Int, minimum: Int) -> Int {
     guard let text = ProcessInfo.processInfo.environment[name],
@@ -430,6 +441,33 @@ private func typeAnnyeongSpaceBackspaceSequence(
     Thread.sleep(forTimeInterval: TimeInterval(idleMilliseconds) / 1000.0)
 }
 
+private func typeFooBarAnnyeongSpaceBackspaceSequence(
+    keyboard: KeyboardDriver,
+    delays: SeededDelayGenerator,
+    observerPort: Int?
+) throws {
+    print("Typing Confluence foo-bar annyeong-space-backspace sequence. Expected visible text: foo안녕 bar")
+    try verifyHisleCLIMode("roman", stage: "Confluence foo-bar initial mode")
+    try placeObserverCaretIfRequested(observerPort: observerPort)
+    Thread.sleep(forTimeInterval: 0.3)
+
+    for keyCode in try keyCodesForVisibleRomanText("foo bar") {
+        try tapKey(keyCode, keyboard: keyboard, delays: delays)
+    }
+
+    for _ in 0..<4 {
+        try tapKey(KeyCode.leftArrow, keyboard: keyboard, delays: delays)
+    }
+
+    try tapModifier(KeyCode.rightShift, keyboard: keyboard, delays: delays, flag: .maskShift)
+    try verifyHisleCLIMode("hangul", stage: "Confluence foo-bar right Shift")
+    try typeAnnyeongSyllables(keyboard: keyboard, delays: delays)
+    try tapKey(KeyCode.space, keyboard: keyboard, delays: delays)
+    try tapKey(KeyCode.backspace, keyboard: keyboard, delays: delays)
+
+    Thread.sleep(forTimeInterval: TimeInterval(idleMilliseconds) / 1000.0)
+}
+
 private func typeRomanTextSequence(
     text: String,
     keyboard: KeyboardDriver,
@@ -586,6 +624,12 @@ private func runAtlassianScenario(
         )
     case "annyeong-space-backspace":
         try typeAnnyeongSpaceBackspaceSequence(
+            keyboard: keyboard,
+            delays: delays,
+            observerPort: observerPort
+        )
+    case "foo-bar-annyeong-space-backspace":
+        try typeFooBarAnnyeongSpaceBackspaceSequence(
             keyboard: keyboard,
             delays: delays,
             observerPort: observerPort

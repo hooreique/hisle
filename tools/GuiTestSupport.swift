@@ -57,6 +57,7 @@ enum KeyCode {
     static let leftCommand: CGKeyCode = 55
     static let leftShift: CGKeyCode = 56
     static let rightShift: CGKeyCode = 60
+    static let leftArrow: CGKeyCode = 123
     static let downArrow: CGKeyCode = 125
 }
 

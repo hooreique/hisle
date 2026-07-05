@@ -22,7 +22,8 @@ struct PendingMarkedTextReplacement {
 }
 
 enum MarkedTextRangePolicy {
-    static let policyID = "current-selection-nsnotfound+split-boundary+conditional-postcommit-caret"
+    static let policyID = "current-selection-nsnotfound+split-boundary+" +
+        "deferred-boundary+conditional-postcommit-caret"
 
     static var currentSelectionReplacementRange: NSRange {
         NSRange(location: NSNotFound, length: 0)

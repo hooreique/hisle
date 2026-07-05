@@ -16,7 +16,7 @@ const chromeApp = process.env.HISLE_ATLASSIAN_CHROME_APP ?? 'Google Chrome';
 const useNormalChrome = process.env.HISLE_ATLASSIAN_NORMAL_CHROME !== '0';
 const reuseNormalChrome = process.env.HISLE_ATLASSIAN_REUSE_CHROME === '1';
 const atlassianScenario = process.env.HISLE_ATLASSIAN_SCENARIO ?? 'annyeonghaseyo';
-const defaultExpectedText = atlassianScenario === 'annyeong-space-backspace' ? '안녕' : '안녕하세요';
+const defaultExpectedText = defaultExpectedTextForScenario(atlassianScenario);
 const expectedText = nonEmptyEnv('HISLE_ATLASSIAN_EXPECTED_TEXT', defaultExpectedText);
 const targetSelector = process.env.HISLE_ATLASSIAN_TARGET_SELECTOR ?? '';
 const editPage = process.env.HISLE_ATLASSIAN_EDIT !== '0';
@@ -95,6 +95,17 @@ function numberFromEnv(name, fallback) {
   }
   const value = Number(text);
   return Number.isFinite(value) ? value : fallback;
+}
+
+function defaultExpectedTextForScenario(scenario) {
+  switch (scenario) {
+    case 'annyeong-space-backspace':
+      return '안녕';
+    case 'foo-bar-annyeong-space-backspace':
+      return 'foo안녕 bar';
+    default:
+      return '안녕하세요';
+  }
 }
 
 function initialCaretOffsetFromText(text) {

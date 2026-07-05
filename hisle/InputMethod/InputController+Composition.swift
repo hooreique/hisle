@@ -37,7 +37,7 @@ extension InputController {
 
         if let splitOutput = splitFlushThenEmitOutput(output, boundaryText: boundaryText) {
             _ = insertCommittedText(splitOutput.compositionText, client: client, traceAction: "commit")
-            insertCommittedBoundaryText(splitOutput.boundaryText, client: client)
+            scheduleCommittedBoundaryText(splitOutput.boundaryText, client: client)
             return true
         }
 
@@ -113,6 +113,12 @@ extension InputController {
         )
 #endif
         return replacementRange
+    }
+
+    private func scheduleCommittedBoundaryText(_ text: String, client: IMKTextInput) {
+        DispatchQueue.main.async { [weak self] in
+            self?.insertCommittedBoundaryText(text, client: client)
+        }
     }
 
     private func insertCommittedBoundaryText(_ text: String, client: IMKTextInput) {
