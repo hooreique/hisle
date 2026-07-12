@@ -13,8 +13,10 @@ Status and temporary rules
   changes. Defer the consolidated documentation pass until code work is done.
 - Keep product fixes, observer repairs, and cleanup separate unless they depend
   on one another.
-- Use a fresh RUN_ID for every browser run. Live Confluence tests can autosave;
-  use only the configured disposable page.
+- Use a fresh RUN_ID for every browser run. The configured Confluence page is
+  a disposable test page: for any TODO in this document, agents may freely edit
+  it and allow draft autosave during live verification without asking again.
+  Never use another page or publish the disposable page.
 - Keep artifacts in build/ or local/. They may contain private text, URLs,
   screenshots, traces, cookies, and paths; never commit them.
 - When all tasks are complete, run the final checklist, update owning docs and
