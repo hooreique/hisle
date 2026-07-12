@@ -229,7 +229,9 @@ Artifacts are written under `build/chrome-ime/<run-id>/`:
 - `keys.jsonl`: Swift HID key-down/key-up events with sequence numbers,
   timestamps, key codes, flags, and planned delay.
 - `dom-events.jsonl`: capture-phase DOM keyboard, composition, input,
-  selection, focus, and blur events.
+  selection, focus, and blur events, including prototype-backed DOM values for
+  `key`, `code`, `data`, `inputType` (`input_type`), and `isComposing`
+  (`is_composing`).
 - `editor-chaos.jsonl`: editor maintenance events for WYSIWYG chaos scenarios.
 - `ime.log`: unified log stream for `hooreique.inputmethod.hisle`.
 - `runtime-identity.log`: post-run unified log snapshot of the running input
@@ -398,7 +400,9 @@ Artifacts:
 
 - `keys.jsonl`: Swift HID key-down/key-up events.
 - `dom-events.jsonl`: capture-phase DOM keyboard, composition, input, selection,
-  focus, and blur events from the Confluence page.
+  focus, and blur events from the Confluence page, including prototype-backed
+  DOM values for `key`, `code`, `data`, `inputType` (`input_type`), and
+  `isComposing` (`is_composing`).
 - `console.jsonl`: browser console and page-error records.
 - `ime.log`: unified log stream for `hooreique.inputmethod.hisle`.
 - `runtime-identity.log`: post-run unified log snapshot of the running input

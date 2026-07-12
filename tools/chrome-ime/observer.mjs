@@ -418,7 +418,7 @@ async function installTestPage(targetPage) {
     }
 
     function eventValue(event, key) {
-      return Object.prototype.hasOwnProperty.call(event, key) ? event[key] : null;
+      return key in event ? event[key] : null;
     }
 
     function targetValue() {

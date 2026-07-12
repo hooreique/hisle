@@ -77,7 +77,7 @@ Product correctness
 Diagnostic correctness and safety
 ---------------------------------
 
-- [ ] Fix event field serialization in both observers.
+- [x] Fix event field serialization in both observers.
   Refs: observer.mjs:420-422; atlassian_observer.mjs:506-508. Prototype-backed
   key/code/data/inputType/isComposing fields are currently always null.
 
