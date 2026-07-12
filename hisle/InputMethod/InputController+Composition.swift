@@ -5,15 +5,40 @@ import os
 
 extension InputController {
     func process(_ input: ColeSebeolInput, client sender: Any?) -> Bool {
+        drainDeferredBoundaryText()
         let boundaryText = markedText.isActive ? flushThenEmitBoundaryText(for: input) : nil
+        var boundaryReplacementDecision: MarkedTextReplacementDecision?
+        if boundaryText != nil {
+            guard let client = textClient(from: sender) else {
+                logger.error("missing IMKTextInput client")
+                return false
+            }
+            let contextGeneration = deferredBoundaryContext.generation
+            let initialMarkedText = markedText.string
+            let initialMarkedRange = markedTextRangeTracker.markedRange
+            let initialInsertionRange = markedTextRangeTracker.insertionRange
+            boundaryReplacementDecision = replacementDecision(for: client)
+            guard contextGeneration == deferredBoundaryContext.generation,
+                  initialMarkedText == markedText.string,
+                  initialMarkedRange == markedTextRangeTracker.markedRange,
+                  initialInsertionRange == markedTextRangeTracker.insertionRange else {
+                return false
+            }
+        }
         let output = hangulEngine.process(input)
-        guard apply(output, to: sender, flushThenEmitBoundaryText: boundaryText) else {
+        guard apply(
+            output,
+            to: sender,
+            flushThenEmitBoundaryText: boundaryText,
+            flushThenEmitReplacementDecision: boundaryReplacementDecision
+        ) else {
             return false
         }
         return output.forwardedActions.isEmpty
     }
 
     func flushBeforeForwarding(to sender: Any?) {
+        drainDeferredBoundaryText()
         guard markedText.isActive else {
             return
         }
@@ -28,7 +53,9 @@ extension InputController {
     func apply(
         _ output: ColeSebeolOutput,
         to sender: Any?,
-        flushThenEmitBoundaryText boundaryText: String? = nil
+        flushThenEmitBoundaryText boundaryText: String? = nil,
+        boundaryContinuationScalars: [Unicode.Scalar] = [],
+        flushThenEmitReplacementDecision boundaryReplacementDecision: MarkedTextReplacementDecision? = nil
     ) -> Bool {
         guard let client = textClient(from: sender) else {
             logger.error("missing IMKTextInput client")
@@ -36,8 +63,13 @@ extension InputController {
         }
 
         if let splitOutput = splitFlushThenEmitOutput(output, boundaryText: boundaryText) {
-            _ = insertCommittedText(splitOutput.compositionText, client: client, traceAction: "commit")
-            scheduleCommittedBoundaryText(splitOutput.boundaryText, client: client)
+            insertCompositionBeforeDeferredBoundary(
+                splitOutput.compositionText,
+                boundaryText: splitOutput.boundaryText,
+                continuationScalars: boundaryContinuationScalars,
+                client: client,
+                replacementDecision: boundaryReplacementDecision
+            )
             return true
         }
 
@@ -115,36 +147,6 @@ extension InputController {
         return replacementRange
     }
 
-    private func scheduleCommittedBoundaryText(_ text: String, client: IMKTextInput) {
-        DispatchQueue.main.async { [weak self] in
-            self?.insertCommittedBoundaryText(text, client: client)
-        }
-    }
-
-    private func insertCommittedBoundaryText(_ text: String, client: IMKTextInput) {
-        let replacementRange = MarkedTextRangePolicy.currentSelectionReplacementRange
-#if DEBUG
-        ClientRangeTracer(logger: logger).traceClientRanges(
-            "before-boundary committedLength=\(text.utf16.count) " +
-                "replacement=\(NSStringFromRange(replacementRange))",
-            client: client,
-            markedText: markedText
-        )
-#endif
-        client.insertText(text, replacementRange: replacementRange)
-        markedTextRangeTracker.recordBoundaryTextAfterActiveComposition(
-            committedLength: text.utf16.count
-        )
-        markedText.clear()
-#if DEBUG
-        ClientRangeTracer(logger: logger).traceClientRanges(
-            "after-boundary committedLength=\(text.utf16.count)",
-            client: client,
-            markedText: markedText
-        )
-#endif
-    }
-
     private func updateMarkedText(_ text: String, client: IMKTextInput) {
         let wasMarkedTextActive = markedText.isActive
         if pendingMarkedTextReplacement == nil {
@@ -204,7 +206,7 @@ extension InputController {
 #endif
     }
 
-    private func replacementDecision(for client: IMKTextInput) -> MarkedTextReplacementDecision {
+    func replacementDecision(for client: IMKTextInput) -> MarkedTextReplacementDecision {
         let decision = MarkedTextRangePolicy.replacementDecision(
             hasMarkedText: markedText.isActive,
             ownedMarkedRange: markedTextRangeTracker.markedRange,

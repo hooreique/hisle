@@ -23,7 +23,7 @@ struct PendingMarkedTextReplacement {
 
 enum MarkedTextRangePolicy {
     static let policyID = "current-selection-nsnotfound+split-boundary+" +
-        "deferred-boundary+plain-commit-fast-path+strict-selection-consistency+" +
+        "state-safe-deferred-boundary+plain-commit-fast-path+strict-selection-consistency+" +
         "conditional-postcommit-caret"
 
     static var currentSelectionReplacementRange: NSRange {
@@ -124,6 +124,17 @@ enum MarkedTextRangePolicy {
         return !overflow && selectedRange.location == terminalLocation
     }
 
+    static func shouldUsePostCommitSelectedRange(
+        preCommitSelectedRange: NSRange,
+        replacementRange: NSRange
+    ) -> Bool {
+        guard replacementRange.location != NSNotFound,
+              preCommitSelectedRange.location != NSNotFound else {
+            return false
+        }
+        return !isSelectionRange(preCommitSelectedRange, consistentWithMarkedRange: replacementRange)
+    }
+
     private static func upperBound(of range: NSRange) -> Int? {
         guard range.location != NSNotFound,
               range.location >= 0,
@@ -159,6 +170,32 @@ struct MarkedTextRangeTracker {
         wasMarkedTextActive: Bool,
         client: IMKTextInput
     ) {
+        let postCommitSelectedRange: NSRange?
+        if MarkedTextRangePolicy.shouldUsePostCommitSelectedRange(
+            preCommitSelectedRange: preCommitSelectedRange,
+            replacementRange: replacementRange
+        ) {
+            postCommitSelectedRange = client.selectedRange()
+        } else {
+            postCommitSelectedRange = nil
+        }
+        recordCommittedText(
+            replacementRange: replacementRange,
+            preCommitSelectedRange: preCommitSelectedRange,
+            committedLength: committedLength,
+            wasMarkedTextActive: wasMarkedTextActive,
+            postCommitSelectedRange: postCommitSelectedRange
+        )
+    }
+
+    mutating func recordCommittedText(
+        replacementRange: NSRange,
+        preCommitSelectedRange: NSRange,
+        committedLength: Int,
+        wasMarkedTextActive: Bool,
+        postCommitSelectedRange: NSRange?,
+        clearOwnershipIfPostSelectionMissing: Bool = false
+    ) {
         markedRange = nil
 
         guard committedLength > 0 else {
@@ -170,12 +207,18 @@ struct MarkedTextRangeTracker {
             return
         }
 
-        if shouldTrustPostCommitSelectedRange(
+        if MarkedTextRangePolicy.shouldUsePostCommitSelectedRange(
             preCommitSelectedRange: preCommitSelectedRange,
             replacementRange: replacementRange
-        ), let selectedRange = Self.validCollapsedRange(client.selectedRange()) {
-            insertionRange = selectedRange
-            return
+        ) {
+            if let selectedRange = postCommitSelectedRange.flatMap(Self.validCollapsedRange) {
+                insertionRange = selectedRange
+                return
+            }
+            if clearOwnershipIfPostSelectionMissing {
+                insertionRange = nil
+                return
+            }
         }
 
         guard let startLocation = startLocationForCommit(replacementRange: replacementRange),
@@ -196,10 +239,29 @@ struct MarkedTextRangeTracker {
         markedLength: Int,
         client: IMKTextInput
     ) {
+        recordMarkedTextUpdate(
+            replacementRange: replacementRange,
+            markedLength: markedLength,
+            clientMarkedRange: client.markedRange()
+        )
+    }
+
+    mutating func recordMarkedTextUpdate(
+        replacementRange: NSRange,
+        markedLength: Int,
+        clientMarkedRange: NSRange?,
+        clearOwnershipIfClientRangeMissing: Bool = false
+    ) {
+        if clearOwnershipIfClientRangeMissing,
+           clientMarkedRange.flatMap(Self.validMarkedRange) == nil {
+            markedRange = nil
+            insertionRange = nil
+            return
+        }
         guard markedLength > 0,
               let startLocation = startLocationForMarkedTextUpdate(
-                replacementRange: replacementRange,
-                client: client
+                  replacementRange: replacementRange,
+                  clientMarkedRange: clientMarkedRange
               ),
               let markedRange = Self.range(location: startLocation, length: markedLength),
               let insertionRange = Self.collapsedRange(at: startLocation, advancedBy: markedLength)
@@ -259,28 +321,12 @@ struct MarkedTextRangeTracker {
         return insertionRange?.location
     }
 
-    private func shouldTrustPostCommitSelectedRange(
-        preCommitSelectedRange: NSRange,
-        replacementRange: NSRange
-    ) -> Bool {
-        guard replacementRange.location != NSNotFound,
-              preCommitSelectedRange.location != NSNotFound
-        else {
-            return false
-        }
-
-        return !MarkedTextRangePolicy.isSelectionRange(
-            preCommitSelectedRange,
-            consistentWithMarkedRange: replacementRange
-        )
-    }
-
     private func startLocationForMarkedTextUpdate(
         replacementRange: NSRange,
-        client: IMKTextInput
+        clientMarkedRange: NSRange?
     ) -> Int? {
-        let clientMarkedRange = client.markedRange()
-        if let markedRange = Self.validMarkedRange(clientMarkedRange) {
+        if let clientMarkedRange,
+           let markedRange = Self.validMarkedRange(clientMarkedRange) {
             return markedRange.location
         }
 

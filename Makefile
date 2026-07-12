@@ -20,7 +20,7 @@ BROWSER_OBSERVER_DIR ?= tools/chrome-ime
 XCODEBUILD_ENV := env -u CC -u CXX -u LD -u SDKROOT -u NIX_CC -u NIX_CFLAGS_COMPILE -u NIX_CFLAGS_LINK -u NIX_LDFLAGS
 XCODEBUILD := $(XCODEBUILD_ENV) /usr/bin/xcodebuild
 
-.PHONY: all help require-nix-shell require-app-shell require-default-shell require-core-shell require-browser-shell require-icon-shell build dmg install-debug uninstall clean icons check-toolchain version-check swiftlint marked-range-policy-check browser-observer-check core-spec-check gui-smoke-test chrome-ime-repro firefox-ime-repro atlassian-confluence-login atlassian-confluence-repro
+.PHONY: all help require-nix-shell require-app-shell require-default-shell require-core-shell require-browser-shell require-icon-shell build dmg install-debug uninstall clean icons check-toolchain version-check swiftlint marked-range-policy-check deferred-boundary-check browser-observer-check core-spec-check gui-smoke-test chrome-ime-repro firefox-ime-repro atlassian-confluence-login atlassian-confluence-repro
 
 all: help
 
@@ -35,6 +35,7 @@ help:
 	@echo '    nix develop --command -- make version-check'
 	@echo '    nix develop --command -- make swiftlint'
 	@echo '    nix develop --command -- make marked-range-policy-check'
+	@echo '    nix develop --command -- make deferred-boundary-check'
 	@echo '    nix develop .#browser --command -- make browser-observer-check'
 	@echo '    nix develop --command -- make gui-smoke-test'
 	@echo '    nix develop .#core --command -- make core-spec-check'
@@ -114,6 +115,9 @@ swiftlint: require-app-shell
 
 marked-range-policy-check: require-default-shell
 	$(NU) tools/marked_text_range_policy_check.nu
+
+deferred-boundary-check: require-default-shell
+	$(NU) tools/deferred_boundary_check.nu
 
 browser-observer-check: require-browser-shell
 	@if [ ! -f '$(BROWSER_OBSERVER_DIR)/node_modules/playwright-core/package.json' ]; then \

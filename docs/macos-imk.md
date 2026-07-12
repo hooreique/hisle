@@ -160,6 +160,23 @@ before that space. Advance the owned insertion range by the whitespace length
 for the next marked-text update, but do not let this rule apply to ordinary
 plain commits with no active marked text.
 
+Treat an accepted deferred boundary as session-owned input that must be emitted
+exactly once. Bind it to the originating IMK client, active editing-context
+generation, owned insertion-range snapshot, and a unique ticket. Resolve queued
+boundaries before any later scalar, key event, host action, mode or focus
+change, external commit/cancel, deactivation, or controller close; a scheduled
+callback whose ticket was already drained is a no-op. A multi-scalar fallback
+that reaches a deferred boundary keeps its remaining scalars as that ticket's
+continuation, so they run after the boundary instead of overtaking it in the
+same call stack. Fold a host-inactive continuation through a copy of the Hangul
+engine before its next host mutation, then publish the engine and apply the
+aggregate committed/marked output through one phase-owned transaction. The
+transaction must be visible before the first host call, including range reads,
+and reentrant lifecycle drains must finish its commit, selection, marked-text,
+and marked-range phases exactly once. Deferred delivery must not clear newer
+marked text, reinterpret the continuation through a later shared input mode, or
+reroute the boundary to a different client.
+
 Keep this policy app-agnostic. Do not add Confluence, Chromium, or editor-name
 branches unless a later bug proves that a general IMK range policy is
 insufficient.

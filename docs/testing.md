@@ -17,6 +17,24 @@ caret positions, stale selections that share only one boundary, invalid ranges,
 integer overflow, and that plain commits avoid host range reads while active
 marked-text commits still read both ranges.
 
+## Deferred Boundary State Check
+
+Run the deterministic deferred-whitespace queue check before GUI or browser
+regressions when changing `FlushThenEmit` scheduling or input-session boundary
+handling:
+
+```sh
+nix develop --command -- make deferred-boundary-check
+```
+
+The check compiles the production deferred-boundary queue, editing-context
+generation, fallback batch reducer, marked-range tracker, and aggregate marked
+completion helper with a manual FIFO scheduler. It verifies next-turn delivery,
+multi-scalar and repeated whitespace ordering, zero-delay next input, Backspace
+and navigation ordering, mode/focus/client session transitions, deactivation,
+stale tickets, exact middle insertion, and reentrant commit/marked/range phases
+without sleeping or pumping a run loop.
+
 ## GUI Smoke Test
 
 Run this as a separate GUI check because InputMethodKit modifier-event delivery

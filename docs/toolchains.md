@@ -50,6 +50,12 @@ Run the deterministic InputMethodKit marked-range policy check:
 nix develop --command -- make marked-range-policy-check
 ```
 
+Run the deterministic deferred-whitespace queue and lifecycle check:
+
+```sh
+nix develop --command -- make deferred-boundary-check
+```
+
 Run the deterministic browser recorder, lifecycle, and wrapper-support checks:
 
 ```sh

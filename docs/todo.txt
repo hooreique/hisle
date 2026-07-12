@@ -65,7 +65,7 @@ Completed baseline
 Product correctness
 -------------------
 
-- [ ] Make deferred whitespace state-safe and add deterministic tests.
+- [x] Make deferred whitespace state-safe and add deterministic tests.
   Refs: InputController+Composition.swift:38-41,118-145;
   InputController+KeyHandling.swift:119-130. The queued callback can mutate or
   clear a newer composition, target a stale client, or drop handled whitespace.
