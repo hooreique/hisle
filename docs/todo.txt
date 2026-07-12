@@ -89,7 +89,7 @@ Diagnostic correctness and safety
   Assert keyboard/composition/input/selectionchange payloads and no page errors;
   node --check and Nu --ide-check are syntax-only.
 
-- [ ] Centralize exact expected output for every Confluence scenario.
+- [x] Centralize exact expected output for every Confluence scenario.
   Refs: atlassian_confluence_repro.nu:77-82;
   atlassian_confluence_driver.swift:26-42,394-423;
   atlassian_observer.mjs:100-108,970-1041. Fix trailing-space false passes,

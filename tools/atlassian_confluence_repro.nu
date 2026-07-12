@@ -4,6 +4,7 @@ const driver_source = "tools/atlassian_confluence_driver.swift"
 const driver_output = "build/tools/atlassian_confluence_driver"
 const observer_dir = "tools/chrome-ime"
 const observer_source = "tools/chrome-ime/atlassian_observer.mjs"
+const scenario_contract_cli = "tools/chrome-ime/atlassian_scenario_contract_cli.mjs"
 const expected_artifacts = [
     "keys.jsonl",
     "dom-events.jsonl",
@@ -72,14 +73,6 @@ def first-non-empty [values: list] {
         }
     }
     ""
-}
-
-def default-expected-text [scenario: string] {
-    match $scenario {
-        "annyeong-space-backspace" => "안녕",
-        "foo-bar-annyeong-space-backspace" => "foo안녕 bar",
-        _ => "안녕하세요",
-    }
 }
 
 def normalize-url [value: string] {
@@ -157,11 +150,6 @@ let remote_debugging_port = ($env.CHROME_REMOTE_DEBUGGING_PORT? | default (rando
 let chrome_path = ($env.CHROME_PATH? | default "")
 let chrome_app = ($env.HISLE_ATLASSIAN_CHROME_APP? | default "Google Chrome")
 let keep_open = ($env.HISLE_ATLASSIAN_KEEP_OPEN? | default "")
-let scenario = ($env.HISLE_ATLASSIAN_SCENARIO? | default "annyeonghaseyo")
-let default_expected_text = default-expected-text $scenario
-let expected_text = ($env.HISLE_ATLASSIAN_EXPECTED_TEXT? | default $default_expected_text)
-let word_count = ($env.HISLE_ATLASSIAN_WORD_COUNT? | default "")
-let roman_text = ($env.HISLE_ATLASSIAN_ROMAN_TEXT? | default "")
 let target_selector = ($env.HISLE_ATLASSIAN_TARGET_SELECTOR? | default "")
 let edit_page = ($env.HISLE_ATLASSIAN_EDIT? | default "")
 let window_title_contains = ($env.HISLE_ATLASSIAN_WINDOW_TITLE_CONTAINS? | default "")
@@ -206,6 +194,24 @@ if $login_only {
     exit 0
 }
 
+let scenario_arguments = [
+    "--scenario", ($env.HISLE_ATLASSIAN_SCENARIO? | default ""),
+    "--word-count", ($env.HISLE_ATLASSIAN_WORD_COUNT? | default ""),
+    "--roman-text", ($env.HISLE_ATLASSIAN_ROMAN_TEXT? | default ""),
+    "--expected-text", ($env.HISLE_ATLASSIAN_EXPECTED_TEXT? | default ""),
+]
+let scenario_result = do { ^node $scenario_contract_cli ...$scenario_arguments } | complete
+if $scenario_result.exit_code != 0 {
+    error make {
+        msg: $"Invalid Atlassian Confluence scenario: ($scenario_result.stderr | str trim)"
+    }
+}
+let scenario_contract = $scenario_result.stdout | from json
+let scenario = $scenario_contract.scenario
+let expected_text = $scenario_contract.expected_text
+let word_count = $scenario_contract.word_count | into string
+let roman_text = $scenario_contract.roman_text | default ""
+
 if not (([$root_dir $observer_dir "node_modules" "playwright-core" "package.json"] | path join) | path exists) {
     print "Installing Atlassian Confluence observer Node dependencies..."
     if (([$root_dir $observer_dir "package-lock.json"] | path join) | path exists) {
@@ -229,10 +235,8 @@ let observer_env = {
     ATLASSIAN_EMAIL: $email
     HISLE_ATLASSIAN_LOGIN_ONLY: (if $login_only { "1" } else { "" })
     HISLE_ATLASSIAN_KEEP_OPEN: $keep_open
-        HISLE_ATLASSIAN_EXPECTED_TEXT: $expected_text
-        HISLE_ATLASSIAN_SCENARIO: $scenario
-        HISLE_ATLASSIAN_WORD_COUNT: $word_count
-        HISLE_ATLASSIAN_TARGET_SELECTOR: $target_selector
+    HISLE_ATLASSIAN_EXPECTED_TEXT: $expected_text
+    HISLE_ATLASSIAN_TARGET_SELECTOR: $target_selector
     HISLE_ATLASSIAN_EDIT: $edit_page
     HISLE_ATLASSIAN_WINDOW_TITLE_CONTAINS: $window_title_contains
     HISLE_ATLASSIAN_ALLOW_MISMATCH: $allow_mismatch

@@ -404,31 +404,30 @@ Useful environment options:
 - `HISLE_ATLASSIAN_TARGET_SELECTOR`, CSS selector for the editor if automatic
   detection picks the wrong `contenteditable`.
 - `HISLE_ATLASSIAN_INITIAL_CARET_OFFSET`, optional text offset for the initial
-  Confluence caret. Use a non-negative DOM Range text offset or `middle`; when
-  set, the final assertion checks the full expected Range text, not only
-  whether the inserted substring appears somewhere. The artifact still records
-  the editor's visible `innerText` separately as `value`.
-- `HISLE_ATLASSIAN_STRICT_FULL_TEXT=1`, require the same full expected Range
-  text assertion even when the caret offset is auto-discovered rather than
-  explicitly configured.
+  Confluence caret. Use a non-negative DOM Range text offset or `middle`.
+  Immediately before HID input, the driver asks the observer to refresh the
+  initial DOM Range text and resolved caret offset.
 - `HISLE_ATLASSIAN_EDIT=0`, require the page to already be in edit mode.
-- `HISLE_ATLASSIAN_EXPECTED_TEXT`, final text substring expected in the editor;
-  the driver sequence currently types the default `안녕하세요`.
+- `HISLE_ATLASSIAN_EXPECTED_TEXT`, override the exact document delta expected
+  from the selected scenario. Leading and trailing whitespace are significant.
+  This assertion override does not change the text typed by `roman-text`.
 - `HISLE_ATLASSIAN_SCENARIO=annyeonghaseyo-words`, type repeated
   `안녕하세요` words separated by spaces. Combine with
   `HISLE_ATLASSIAN_WORD_COUNT`, default `3`, to reproduce cursor jumps during
-  ordinary multi-word Hangul input.
+  ordinary multi-word Hangul input. The expected delta is generated from the
+  resolved word count, with no trailing space.
 - `HISLE_ATLASSIAN_SCENARIO=annyeong-space-backspace`, type `안녕`, press
-  Space, then press Backspace. The expected inserted text defaults to `안녕`;
-  combine it with `HISLE_ATLASSIAN_INITIAL_CARET_OFFSET` for a strict full-text
-  assertion inside existing Confluence content.
+  Space, then press Backspace. The expected document delta defaults to `안녕`.
 - `HISLE_ATLASSIAN_SCENARIO=foo-bar-annyeong-space-backspace`, type `foo bar`
   in Roman mode, move the caret back to immediately after `foo`, type `안녕 `,
-  then press Backspace. The expected visible text defaults to `foo안녕 bar`.
+  then press Backspace. The expected document delta defaults to `foo안녕 bar`.
 - `HISLE_ATLASSIAN_SCENARIO=roman-foo-bar`, type visible Roman text
-  `foo bar foo bar` through hisle Roman mode.
+  `foo bar foo bar` through hisle Roman mode; the expected document delta uses
+  the same text.
 - `HISLE_ATLASSIAN_SCENARIO=roman-text` with `HISLE_ATLASSIAN_ROMAN_TEXT`,
   type a custom visible lowercase Roman text string through hisle Roman mode.
+  `HISLE_ATLASSIAN_ROMAN_TEXT` is required and is the default expected document
+  delta for this scenario.
 - `HISLE_ATLASSIAN_HANGUL_BEFORE_EDITOR_CLICK=1`, select Hangul mode before
   focusing the Confluence editor. Use this to verify the intended fresh
   app/client Roman-mode initialization and to observe cursor placement at the
@@ -441,6 +440,11 @@ Useful environment options:
 - `HISLE_ATLASSIAN_REUSE_CHROME=1`, connect to an already-open Chrome on
   `CHROME_REMOTE_DEBUGGING_PORT` instead of launching a new one.
 - `RUN_ID`, stable run directory name under `local/atlassian/runs/`.
+
+For every scenario, success requires the final DOM Range text to equal the
+captured initial text with the exact expected document delta inserted at the
+captured caret. `contains_expected_text` remains in the artifacts for diagnosis
+but never determines success.
 
 Artifacts:
 
@@ -455,8 +459,8 @@ Artifacts:
   method app version, bundle path, process id, and replacement policy.
 - `driver-state.json`, `observer-ready.json`, and `environment.json`: run
   metadata, selected input source, profile path, page URL, and timing data.
-- `final-state.json`: final editor text summary, expected-text match, and event
-  anomaly counters.
+- `final-state.json`: final editor text summary, exact expected full text and
+  match, diagnostic substring match, and event anomaly counters.
 - `screenshot.png` and `trace.zip`: final page screenshot and Playwright trace.
 
 ### Debug Client Range Trace

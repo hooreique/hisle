@@ -22,25 +22,11 @@ private let skipEditorClick = ProcessInfo.processInfo.environment["HISLE_ATLASSI
 private let hangulBeforeEditorClick = ProcessInfo.processInfo.environment[
     "HISLE_ATLASSIAN_HANGUL_BEFORE_EDITOR_CLICK"
 ] == "1"
-private let initialCaretOffset = ProcessInfo.processInfo.environment["HISLE_ATLASSIAN_INITIAL_CARET_OFFSET"] ?? ""
-private let atlassianScenario = ProcessInfo.processInfo.environment["HISLE_ATLASSIAN_SCENARIO"] ?? "annyeonghaseyo"
-private let atlassianWordCount = environmentInteger("HISLE_ATLASSIAN_WORD_COUNT", defaultValue: 3, minimum: 1)
-private let defaultExpectedText = expectedTextForScenario(atlassianScenario)
-private let expectedText = ProcessInfo.processInfo.environment["HISLE_ATLASSIAN_EXPECTED_TEXT"]
-    .flatMap { $0.isEmpty ? nil : $0 } ?? defaultExpectedText
-private let atlassianRomanText = ProcessInfo.processInfo.environment["HISLE_ATLASSIAN_ROMAN_TEXT"]
-    .flatMap { $0.isEmpty ? nil : $0 } ?? expectedText
-
-private func expectedTextForScenario(_ scenario: String) -> String {
-    switch scenario {
-    case "annyeong-space-backspace":
-        return "안녕"
-    case "foo-bar-annyeong-space-backspace":
-        return "foo안녕 bar"
-    default:
-        return "안녕하세요"
-    }
-}
+private let atlassianScenario = ProcessInfo.processInfo.environment["HISLE_ATLASSIAN_SCENARIO"] ?? ""
+private let atlassianWordCount = ProcessInfo.processInfo.environment["HISLE_ATLASSIAN_WORD_COUNT"]
+    .flatMap(Int.init) ?? 0
+private let expectedText = ProcessInfo.processInfo.environment["HISLE_ATLASSIAN_EXPECTED_TEXT"] ?? ""
+private let atlassianRomanText = ProcessInfo.processInfo.environment["HISLE_ATLASSIAN_ROMAN_TEXT"] ?? ""
 
 private func environmentInteger(_ name: String, defaultValue: Int, minimum: Int) -> Int {
     guard let text = ProcessInfo.processInfo.environment[name],
@@ -373,15 +359,15 @@ private func typeAnnyeonghaseyoSequence(
     hangulAlreadySelected: Bool,
     observerPort: Int?
 ) throws {
-    print("Typing Confluence IME sequence. Expected visible text contains: \(String(reflecting: expectedText))")
+    print("Typing Confluence IME sequence. Expected document delta: \(String(reflecting: expectedText))")
     if hangulAlreadySelected {
         try verifyHisleCLIMode("hangul", stage: "Confluence pre-focus Hangul mode")
-        try placeObserverCaretIfRequested(observerPort: observerPort)
+        try placeObserverCaret(observerPort: observerPort)
         try tapModifier(KeyCode.rightShift, keyboard: keyboard, delays: delays, flag: .maskShift)
         try verifyHisleCLIMode("hangul", stage: "Confluence right Shift after caret placement")
     } else {
         try verifyHisleCLIMode("roman", stage: "Confluence initial mode")
-        try placeObserverCaretIfRequested(observerPort: observerPort)
+        try placeObserverCaret(observerPort: observerPort)
         try tapModifier(KeyCode.rightShift, keyboard: keyboard, delays: delays, flag: .maskShift)
         try verifyHisleCLIMode("hangul", stage: "Confluence right Shift")
     }
@@ -399,16 +385,16 @@ private func typeAnnyeonghaseyoWordsSequence(
 ) throws {
     print(
         "Typing Confluence IME word sequence. " +
-            "Words: \(atlassianWordCount). Expected visible text contains: \(String(reflecting: expectedText))"
+            "Words: \(atlassianWordCount). Expected document delta: \(String(reflecting: expectedText))"
     )
     if hangulAlreadySelected {
         try verifyHisleCLIMode("hangul", stage: "Confluence pre-focus Hangul mode")
-        try placeObserverCaretIfRequested(observerPort: observerPort)
+        try placeObserverCaret(observerPort: observerPort)
         try tapModifier(KeyCode.rightShift, keyboard: keyboard, delays: delays, flag: .maskShift)
         try verifyHisleCLIMode("hangul", stage: "Confluence right Shift after caret placement")
     } else {
         try verifyHisleCLIMode("roman", stage: "Confluence initial mode")
-        try placeObserverCaretIfRequested(observerPort: observerPort)
+        try placeObserverCaret(observerPort: observerPort)
         try tapModifier(KeyCode.rightShift, keyboard: keyboard, delays: delays, flag: .maskShift)
         try verifyHisleCLIMode("hangul", stage: "Confluence right Shift")
     }
@@ -428,9 +414,12 @@ private func typeAnnyeongSpaceBackspaceSequence(
     delays: SeededDelayGenerator,
     observerPort: Int?
 ) throws {
-    print("Typing Confluence annyeong-space-backspace sequence. Expected inserted text: 안녕")
+    print(
+        "Typing Confluence annyeong-space-backspace sequence. " +
+            "Expected document delta: \(String(reflecting: expectedText))"
+    )
     try verifyHisleCLIMode("roman", stage: "Confluence annyeong-space-backspace initial mode")
-    try placeObserverCaretIfRequested(observerPort: observerPort)
+    try placeObserverCaret(observerPort: observerPort)
     try tapModifier(KeyCode.rightShift, keyboard: keyboard, delays: delays, flag: .maskShift)
     try verifyHisleCLIMode("hangul", stage: "Confluence annyeong-space-backspace right Shift")
 
@@ -446,9 +435,12 @@ private func typeFooBarAnnyeongSpaceBackspaceSequence(
     delays: SeededDelayGenerator,
     observerPort: Int?
 ) throws {
-    print("Typing Confluence foo-bar annyeong-space-backspace sequence. Expected visible text: foo안녕 bar")
+    print(
+        "Typing Confluence foo-bar annyeong-space-backspace sequence. " +
+            "Expected document delta: \(String(reflecting: expectedText))"
+    )
     try verifyHisleCLIMode("roman", stage: "Confluence foo-bar initial mode")
-    try placeObserverCaretIfRequested(observerPort: observerPort)
+    try placeObserverCaret(observerPort: observerPort)
     Thread.sleep(forTimeInterval: 0.3)
 
     for keyCode in try keyCodesForVisibleRomanText("foo bar") {
@@ -474,9 +466,9 @@ private func typeRomanTextSequence(
     delays: SeededDelayGenerator,
     observerPort: Int?
 ) throws {
-    print("Typing Confluence Roman sequence. Expected visible text contains: \(String(reflecting: text))")
+    print("Typing Confluence Roman sequence. Expected document delta: \(String(reflecting: expectedText))")
     try verifyHisleCLIMode("roman", stage: "Confluence Roman text initial mode")
-    try placeObserverCaretIfRequested(observerPort: observerPort)
+    try placeObserverCaret(observerPort: observerPort)
     Thread.sleep(forTimeInterval: 0.3)
 
     for keyCode in try keyCodesForVisibleRomanText(text) {
@@ -527,10 +519,7 @@ private func keyCodesForVisibleRomanText(_ text: String) throws -> [CGKeyCode] {
     }
 }
 
-private func placeObserverCaretIfRequested(observerPort: Int?) throws {
-    guard !initialCaretOffset.isEmpty else {
-        return
-    }
+private func placeObserverCaret(observerPort: Int?) throws {
     guard let observerPort else {
         throw GuiTestFailure.message("Observer did not report a port for caret placement.")
     }
@@ -654,6 +643,19 @@ private func runAtlassianScenario(
 }
 
 private func runAtlassianDriver() throws {
+    guard !atlassianScenario.isEmpty else {
+        throw GuiTestFailure.message("Missing HISLE_ATLASSIAN_SCENARIO from the scenario contract.")
+    }
+    guard atlassianWordCount > 0 else {
+        throw GuiTestFailure.message("Missing HISLE_ATLASSIAN_WORD_COUNT from the scenario contract.")
+    }
+    guard !expectedText.isEmpty else {
+        throw GuiTestFailure.message("Missing HISLE_ATLASSIAN_EXPECTED_TEXT from the scenario contract.")
+    }
+    if atlassianScenario == "roman-text", atlassianRomanText.isEmpty {
+        throw GuiTestFailure.message("Missing HISLE_ATLASSIAN_ROMAN_TEXT for the roman-text scenario.")
+    }
+
     let options = try DriverOptions.parse(arguments: Array(CommandLine.arguments.dropFirst()))
     try requireAccessibilityPermission(
         rerunCommand: "nix develop .#browser --command -- make atlassian-confluence-repro"

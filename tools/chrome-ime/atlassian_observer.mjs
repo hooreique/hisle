@@ -11,6 +11,7 @@ import {
   findPageWithConfluenceIdentity,
   hasSameConfluencePageIdentity,
 } from './atlassian_page_identity.mjs';
+import { expectedDocumentState } from './atlassian_scenario_contract.mjs';
 
 const runDir = requiredEnv('RUN_DIR');
 const profileDir = requiredEnv('ATLASSIAN_PROFILE_DIR');
@@ -22,19 +23,16 @@ const chromePath = process.env.CHROME_PATH ?? '';
 const chromeApp = process.env.HISLE_ATLASSIAN_CHROME_APP ?? 'Google Chrome';
 const useNormalChrome = process.env.HISLE_ATLASSIAN_NORMAL_CHROME !== '0';
 const reuseNormalChrome = process.env.HISLE_ATLASSIAN_REUSE_CHROME === '1';
-const atlassianScenario = process.env.HISLE_ATLASSIAN_SCENARIO ?? 'annyeonghaseyo';
-const defaultExpectedText = defaultExpectedTextForScenario(atlassianScenario);
-const expectedText = nonEmptyEnv('HISLE_ATLASSIAN_EXPECTED_TEXT', defaultExpectedText);
+const loginOnly = process.env.HISLE_ATLASSIAN_LOGIN_ONLY === '1';
+const expectedText = loginOnly ? '' : requiredEnv('HISLE_ATLASSIAN_EXPECTED_TEXT');
 const targetSelector = process.env.HISLE_ATLASSIAN_TARGET_SELECTOR ?? '';
 const editPage = process.env.HISLE_ATLASSIAN_EDIT !== '0';
-const loginOnly = process.env.HISLE_ATLASSIAN_LOGIN_ONLY === '1';
 const keepOpen = process.env.HISLE_ATLASSIAN_KEEP_OPEN === '1';
 const traceEnabled = process.env.HISLE_ATLASSIAN_TRACE !== '0';
 const allowMismatch = process.env.HISLE_ATLASSIAN_ALLOW_MISMATCH === '1';
 const editorTimeoutMilliseconds = numberFromEnv('HISLE_ATLASSIAN_EDITOR_TIMEOUT_MS', 90000);
 const configuredWindowTitleContains = process.env.HISLE_ATLASSIAN_WINDOW_TITLE_CONTAINS ?? '';
 const initialCaretOffsetText = process.env.HISLE_ATLASSIAN_INITIAL_CARET_OFFSET ?? '';
-const strictFullText = initialCaretOffsetText !== '' || process.env.HISLE_ATLASSIAN_STRICT_FULL_TEXT === '1';
 const readyFile = path.join(runDir, 'observer-ready.json');
 const pidFile = path.join(runDir, 'observer.pid');
 
@@ -93,11 +91,6 @@ function requiredEnv(name) {
   return value;
 }
 
-function nonEmptyEnv(name, fallback) {
-  const value = process.env[name];
-  return value && value.length > 0 ? value : fallback;
-}
-
 function numberFromEnv(name, fallback) {
   const text = process.env[name];
   if (!text) {
@@ -105,17 +98,6 @@ function numberFromEnv(name, fallback) {
   }
   const value = Number(text);
   return Number.isFinite(value) ? value : fallback;
-}
-
-function defaultExpectedTextForScenario(scenario) {
-  switch (scenario) {
-    case 'annyeong-space-backspace':
-      return '안녕';
-    case 'foo-bar-annyeong-space-backspace':
-      return 'foo안녕 bar';
-    default:
-      return '안녕하세요';
-  }
 }
 
 function initialCaretOffsetFromText(text) {
@@ -969,7 +951,7 @@ async function finalize({ reason, driverExitCode }) {
   await writeJSONLines(path.join(runDir, 'dom-events.jsonl'), domEvents);
   await writeJSONLines(path.join(runDir, 'console.jsonl'), consoleRecords);
 
-  const finalState = page ? await page.evaluate(({ expected, strictFullText }) => {
+  const finalState = page ? await page.evaluate(() => {
     const state = window.__hisleAtlassian;
     const target = state?.target ?? null;
     const value = target ? (target.innerText ?? target.textContent ?? '') : '';
@@ -981,9 +963,6 @@ async function finalize({ reason, driverExitCode }) {
     const initialText = state?.initial_text ?? '';
     const initialRangeText = state?.initial_range_text ?? initialText;
     const initialCaretOffset = state?.initial_caret_offset ?? null;
-    const expectedFullText = strictFullText && Number.isInteger(initialCaretOffset)
-      ? initialRangeText.slice(0, initialCaretOffset) + expected + initialRangeText.slice(initialCaretOffset)
-      : null;
     const active = document.activeElement;
 
     return {
@@ -995,10 +974,6 @@ async function finalize({ reason, driverExitCode }) {
       initial_range_text: initialRangeText,
       initial_caret_offset: initialCaretOffset,
       value_changed: rangeValue !== initialRangeText,
-      expected_text: expected,
-      expected_full_text: expectedFullText,
-      contains_expected_text: rangeValue.includes(expected),
-      matches_expected_full_text: expectedFullText == null ? null : rangeValue === expectedFullText,
       active_element: active ? {
         tagName: active.tagName,
         id: active.id || null,
@@ -1012,35 +987,41 @@ async function finalize({ reason, driverExitCode }) {
       beforeinput_event_count: state?.events?.filter((event) => event.event_type === 'beforeinput').length ?? 0,
       target_descriptor: state?.target_descriptor ?? null,
     };
-  }, { expected: expectedText, strictFullText }).catch((error) => ({
+  }).catch((error) => ({
     wall_clock_timestamp: new Date().toISOString(),
     value: '',
+    range_value: '',
     initial_text: '',
+    initial_range_text: '',
+    initial_caret_offset: null,
     value_changed: false,
-    expected_text: expectedText,
-    contains_expected_text: false,
-    matches_expected_full_text: null,
     event_count: 0,
     finalize_error: String(error?.stack ?? error),
   })) : {
     wall_clock_timestamp: new Date().toISOString(),
     value: '',
+    range_value: '',
     initial_text: '',
+    initial_range_text: '',
+    initial_caret_offset: null,
     value_changed: false,
-    expected_text: expectedText,
-    contains_expected_text: false,
-    matches_expected_full_text: null,
     event_count: 0,
   };
 
+  Object.assign(finalState, {
+    expected_text: expectedText,
+    ...expectedDocumentState({
+      initialRangeText: finalState.initial_range_text,
+      initialCaretOffset: finalState.initial_caret_offset,
+      expectedText,
+      actualRangeText: finalState.range_value,
+    }),
+  });
   finalState.reason = reason;
   finalState.driver_exit_code = driverExitCode;
-  const strictMatch = finalState.expected_full_text == null
-    ? finalState.contains_expected_text
-    : finalState.matches_expected_full_text;
   finalState.matches_expected_text = driverExitCode === 0 &&
     finalState.value_changed === true &&
-    strictMatch === true;
+    finalState.matches_expected_full_text === true;
   finalState.anomalies = analyzeEvents(domEvents);
 
   await fs.writeFile(
