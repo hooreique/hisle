@@ -102,7 +102,7 @@ Diagnostic correctness and safety
   Ref: atlassian_observer.mjs:237-268. Require normalized URL/path identity or a
   dedicated page handle before Edit/HID actions can autosave a draft.
 
-- [ ] Guarantee cleanup on every observer/wrapper exit and RUN_ID collision.
+- [x] Guarantee cleanup on every observer/wrapper exit and RUN_ID collision.
   Refs: observer.mjs:64-81,138-210,1232-1242;
   atlassian_observer.mjs:46-65,166-214; both Nushell job sections. Use
   idempotent finally/defer cleanup for Node, Chrome, Firefox/geckodriver, ports,

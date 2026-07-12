@@ -1,9 +1,12 @@
+use browser_repro_support.nu [cleanup-observer-job create-fresh-run-directory]
+
 const root_dir = path self ..
 const support_source = "tools/GuiTestSupport.swift"
 const driver_source = "tools/chrome_ime_driver.swift"
 const driver_output = "build/tools/chrome_ime_driver"
 const observer_dir = "tools/chrome-ime"
 const observer_source = "tools/chrome-ime/observer.mjs"
+const observer_supervisor = "tools/chrome-ime/observer_supervisor.mjs"
 const base_expected_artifacts = [
     "keys.jsonl",
     "dom-events.jsonl",
@@ -153,6 +156,7 @@ let run_id = if ($run_id_env | is-empty) {
 let run_dir = [$root_dir "build" $"($browser_slug)-ime" $run_id] | path join
 let ready_file = [$run_dir "observer-ready.json"] | path join
 let observer_process_file = [$run_dir "observer-process.json"] | path join
+let observer_pid_file = [$run_dir "observer.pid"] | path join
 let observer_stdout_file = [$run_dir "observer.stdout.log"] | path join
 let observer_stderr_file = [$run_dir "observer.stderr.log"] | path join
 let driver_stdout_file = [$run_dir "driver.stdout.log"] | path join
@@ -178,7 +182,7 @@ let browser_path = if $browser_kind == "firefox" {
 }
 let keep_open = env-first [$"($browser_prefix)_KEEP_OPEN" "HISLE_CHROME_KEEP_OPEN"]
 
-mkdir $run_dir
+create-fresh-run-directory $run_dir
 mkdir ([$root_dir "build" "tools"] | path join)
 
 let has_playwright_core = ([$root_dir $observer_dir "node_modules" "playwright-core" "package.json"] | path join) | path exists
@@ -224,6 +228,7 @@ let observer_job = job spawn --description $"hisle ($browser_slug) ime observer"
             RUN_DIR: $run_dir
             RUN_ID: $run_id
             OBSERVER_PORT: $observer_port
+            HISLE_WRAPPER_PID: ($nu.pid | into string)
             HISLE_BROWSER_KIND: $browser_kind
             CHROME_REMOTE_DEBUGGING_PORT: $remote_debugging_port
             CHROME_PATH: (if $browser_kind == "chrome" { $browser_path } else { "" })
@@ -261,7 +266,7 @@ let observer_job = job spawn --description $"hisle ($browser_slug) ime observer"
             HISLE_CHROME_KEEP_OPEN: $keep_open
             HISLE_FIREFOX_KEEP_OPEN: $keep_open
         } {
-            ^node $observer_source
+            ^node $observer_supervisor $observer_source
         }
     } | complete
 
@@ -270,6 +275,7 @@ let observer_job = job spawn --description $"hisle ($browser_slug) ime observer"
     { exit_code: $result.exit_code } | to json | save --force $observer_process_file
 }
 
+try {
 wait-for-file $ready_file $observer_process_file $"($browser_label) observer readiness"
 let ready = open $ready_file
 let ready_url = $"http://127.0.0.1:($ready.observer_port)/ready"
@@ -402,3 +408,6 @@ if $observer_result.exit_code != 0 {
 }
 
 print $"($browser_label) IME repro passed. Artifacts: ($run_dir)"
+} finally {
+    cleanup-observer-job $observer_job $observer_pid_file
+}

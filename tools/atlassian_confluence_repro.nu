@@ -1,9 +1,12 @@
+use browser_repro_support.nu [cleanup-observer-job create-fresh-run-directory]
+
 const root_dir = path self ..
 const support_source = "tools/GuiTestSupport.swift"
 const driver_source = "tools/atlassian_confluence_driver.swift"
 const driver_output = "build/tools/atlassian_confluence_driver"
 const observer_dir = "tools/chrome-ime"
 const observer_source = "tools/chrome-ime/atlassian_observer.mjs"
+const observer_supervisor = "tools/chrome-ime/observer_supervisor.mjs"
 const scenario_contract_cli = "tools/chrome-ime/atlassian_scenario_contract_cli.mjs"
 const base_expected_artifacts = [
     "keys.jsonl",
@@ -156,6 +159,7 @@ let run_dir = [$local_atlassian_dir "runs" $run_id] | path join
 let profile_dir = ($env.HISLE_ATLASSIAN_PROFILE_DIR? | default ([$local_atlassian_dir "chrome-profile"] | path join))
 let ready_file = [$run_dir "observer-ready.json"] | path join
 let observer_process_file = [$run_dir "observer-process.json"] | path join
+let observer_pid_file = [$run_dir "observer.pid"] | path join
 let observer_stdout_file = [$run_dir "observer.stdout.log"] | path join
 let observer_stderr_file = [$run_dir "observer.stderr.log"] | path join
 let driver_stdout_file = [$run_dir "driver.stdout.log"] | path join
@@ -179,7 +183,7 @@ let editor_timeout = ($env.HISLE_ATLASSIAN_EDITOR_TIMEOUT_MS? | default "")
 let initial_caret_offset = ($env.HISLE_ATLASSIAN_INITIAL_CARET_OFFSET? | default "")
 
 ensure-private-directory ([$local_atlassian_dir "runs"] | path join)
-ensure-private-directory $run_dir
+create-fresh-run-directory $run_dir
 ensure-private-directory $profile_dir
 mkdir ([$root_dir "build" "tools"] | path join)
 
@@ -244,6 +248,7 @@ let observer_env = {
     RUN_DIR: $run_dir
     RUN_ID: $run_id
     OBSERVER_PORT: $observer_port
+    HISLE_WRAPPER_PID: ($nu.pid | into string)
     CHROME_REMOTE_DEBUGGING_PORT: $remote_debugging_port
     CHROME_PATH: $chrome_path
     HISLE_ATLASSIAN_CHROME_APP: $chrome_app
@@ -293,7 +298,7 @@ print $"Writing Atlassian Confluence artifacts to ($run_dir)"
 let observer_job = job spawn --description "hisle atlassian confluence observer" {
     let result = do {
         with-env $observer_env {
-            ^node $observer_source
+            ^node $observer_supervisor $observer_source
         }
     } | complete
 
@@ -302,6 +307,7 @@ let observer_job = job spawn --description "hisle atlassian confluence observer"
     { exit_code: $result.exit_code } | to json | save --force $observer_process_file
 }
 
+try {
 wait-for-file $ready_file $observer_process_file "Atlassian Confluence observer readiness"
 let ready = open $ready_file
 let ready_url = $"http://127.0.0.1:($ready.observer_port)/ready"
@@ -419,3 +425,6 @@ if $observer_result.exit_code != 0 {
 }
 
 print $"Atlassian Confluence repro passed. Artifacts: ($run_dir)"
+} finally {
+    cleanup-observer-job $observer_job $observer_pid_file
+}

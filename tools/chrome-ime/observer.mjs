@@ -6,6 +6,11 @@ import path from 'node:path';
 import process from 'node:process';
 
 import { installDOMEventRecorder } from './dom_event_recorder.mjs';
+import {
+  ObserverLifecycle,
+  closeFirefoxSession,
+  closeHttpServer,
+} from './observer_lifecycle.mjs';
 
 const runDir = requiredEnv('RUN_DIR');
 const runId = process.env.RUN_ID ?? path.basename(runDir);
@@ -54,16 +59,48 @@ const expectedValue = process.env.EXPECTED_VALUE && process.env.EXPECTED_VALUE.l
 const readyFile = path.join(runDir, 'observer-ready.json');
 const pidFile = path.join(runDir, 'observer.pid');
 const userDataDir = path.join(runDir, `${browserKind}-profile`);
+const supervisorPID = processIDFromEnv('HISLE_SUPERVISOR_PID');
+const controlPID = supervisorPID ?? process.pid;
 
 let browserSession;
 let page;
 let server;
-let finalized = false;
+let preserveBrowser = false;
+let shutdownRequest = null;
+let resolveShutdown;
+let setupComplete = false;
+let runClaimed = false;
+let cleanupPromise = null;
+const runtimeLifecycle = new ObserverLifecycle();
+const browserLifecycle = new ObserverLifecycle();
+const shutdownPromise = new Promise((resolve) => {
+  resolveShutdown = resolve;
+});
 
-await fs.mkdir(runDir, { recursive: true });
-await fs.writeFile(pidFile, `${process.pid}\n`, 'utf8');
+for (const [signal, driverExitCode] of [['SIGTERM', 143], ['SIGINT', 130], ['SIGHUP', 129]]) {
+  process.on(signal, () => {
+    requestObserverShutdown({
+      reason: signal.toLowerCase(),
+      driverExitCode,
+      exitCode: driverExitCode,
+    });
+  });
+}
+process.on('uncaughtException', (error) => {
+  requestObserverShutdown({ reason: 'uncaught-exception', driverExitCode: 1, exitCode: 1, error });
+});
+process.on('unhandledRejection', (reason) => {
+  const error = reason instanceof Error ? reason : new Error(String(reason));
+  requestObserverShutdown({ reason: 'unhandled-rejection', driverExitCode: 1, exitCode: 1, error });
+});
 
+let exitCode = 1;
 try {
+  await fs.mkdir(runDir, { recursive: true });
+  await fs.writeFile(pidFile, `${controlPID}\n`, { encoding: 'utf8', flag: 'wx' });
+  runClaimed = true;
+  startSupervisorWatchdog();
+
   if (!['textarea', 'contenteditable', 'wysiwyg'].includes(targetKind)) {
     throw new Error(`Unsupported ${browserEnvPrefix}_TARGET: ${targetKind}`);
   }
@@ -76,22 +113,63 @@ try {
   await startBrowser();
   await startServer();
   await writeReadyFile();
+  setupComplete = true;
   console.log(`observer ready on http://127.0.0.1:${server.address().port}`);
+
+  const request = await shutdownPromise;
+  if (request.error) {
+    throw request.error;
+  }
+  const result = await finalize({
+    reason: request.reason,
+    driverExitCode: request.driverExitCode,
+  });
+  preserveBrowser = Boolean(request.response) && keepOpen && result.ok;
+  if (request.response) {
+    writeJSON(request.response, 200, result);
+  }
+  exitCode = request.exitCode ?? (result.ok ? 0 : 2);
 } catch (error) {
-  await writeFailureState(error);
+  if (runClaimed) {
+    await writeFailureState(error).catch((writeError) => {
+      console.error(writeError?.stack ?? String(writeError));
+    });
+  }
+  if (shutdownRequest?.response && !shutdownRequest.response.headersSent) {
+    writeJSON(shutdownRequest.response, 500, {
+      ok: false,
+      error: String(error?.stack ?? error),
+    });
+  }
   console.error(error?.stack ?? String(error));
-  process.exit(1);
+  exitCode = shutdownRequest?.exitCode ?? 1;
+} finally {
+  const cleanup = await disposeResources();
+  for (const failure of cleanup.errors) {
+    console.error(`Cleanup failed (${failure.label}): ${failure.error?.stack ?? failure.error}`);
+  }
+  if (cleanup.errors.length > 0 && exitCode === 0) {
+    exitCode = 1;
+  }
 }
 
-process.on('SIGTERM', () => {
-  finalize({ reason: 'sigterm', driverExitCode: 143 })
-    .finally(() => process.exit(143));
-});
+process.exit(exitCode);
 
-process.on('SIGINT', () => {
-  finalize({ reason: 'sigint', driverExitCode: 130 })
-    .finally(() => process.exit(130));
-});
+function requestObserverShutdown(request) {
+  if (shutdownRequest) {
+    if (request.response && !request.response.headersSent) {
+      writeJSON(request.response, 409, { ok: false, error: 'observer shutdown already requested' });
+    }
+    return false;
+  }
+
+  shutdownRequest = request;
+  resolveShutdown(request);
+  if (!setupComplete) {
+    void disposeResources();
+  }
+  return true;
+}
 
 function requiredEnv(name) {
   const value = process.env[name];
@@ -129,6 +207,67 @@ function numberFromEnv(names, fallback) {
   return Number.isFinite(value) ? value : fallback;
 }
 
+function processIDFromEnv(name) {
+  const text = process.env[name] ?? '';
+  if (!text) {
+    return null;
+  }
+  const value = Number(text);
+  if (!Number.isInteger(value) || value <= 0) {
+    throw new Error(`${name} must be a positive process ID.`);
+  }
+  return value;
+}
+
+function throwIfShutdownRequested() {
+  if (cleanupPromise) {
+    throw new Error(`Observer shutdown requested during setup: ${shutdownRequest?.reason ?? 'unknown'}`);
+  }
+}
+
+function startSupervisorWatchdog() {
+  if (!supervisorPID) {
+    return;
+  }
+  if (process.ppid !== supervisorPID) {
+    throw new Error(`Observer supervisor mismatch: expected parent ${supervisorPID}, got ${process.ppid}.`);
+  }
+
+  const watchdog = setInterval(() => {
+    if (process.ppid !== supervisorPID || !processIsAlive(supervisorPID)) {
+      requestObserverShutdown({
+        reason: 'supervisor-exited',
+        driverExitCode: 1,
+        exitCode: 1,
+      });
+    }
+  }, 250);
+  runtimeLifecycle.defer('supervisor-watchdog', () => clearInterval(watchdog));
+}
+
+function processIsAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function disposeResources() {
+  if (!cleanupPromise) {
+    cleanupPromise = (async () => {
+      const runtimeCleanup = await runtimeLifecycle.dispose();
+      if (runtimeCleanup.errors.length > 0) {
+        preserveBrowser = false;
+      }
+      const browserCleanup = await browserLifecycle.dispose();
+      return { errors: [...runtimeCleanup.errors, ...browserCleanup.errors] };
+    })();
+  }
+  return cleanupPromise;
+}
+
 async function startBrowser() {
   if (browserKind === 'firefox') {
     await startFirefoxBrowser();
@@ -159,10 +298,23 @@ async function startChromiumBrowser() {
     launchOptions.args.push(`--remote-debugging-port=${remoteDebuggingPort}`);
   }
 
-  const context = await chromium.launchPersistentContext(userDataDir, launchOptions);
+  const context = await browserLifecycle.acquire(
+    'chromium-context',
+    () => chromium.launchPersistentContext(userDataDir, launchOptions),
+    (acquiredContext) => acquiredContext.close(),
+  );
+  throwIfShutdownRequested();
 
   if (traceEnabled) {
-    await context.tracing.start({ screenshots: true, snapshots: true, sources: false });
+    await runtimeLifecycle.acquire(
+      'chromium-trace',
+      async () => {
+        await context.tracing.start({ screenshots: true, snapshots: true, sources: false });
+        return context.tracing;
+      },
+      (tracing) => tracing.stop({ path: path.join(runDir, 'trace.zip') }),
+    );
+    throwIfShutdownRequested();
   }
 
   const playwrightPage = context.pages()[0] ?? await context.newPage();
@@ -170,18 +322,11 @@ async function startChromiumBrowser() {
   page = playwrightPage;
   browserSession = {
     version: () => context.browser()?.version() ?? null,
-    stopTracing: async (tracePath) => {
-      if (traceEnabled) {
-        await context.tracing.stop({ path: tracePath });
-      }
-    },
-    close: () => context.close(),
   };
   await installTestPage(page);
 }
 
 async function startFirefoxBrowser() {
-  const webdriver = await import('selenium-webdriver');
   const firefox = await import('selenium-webdriver/firefox.js');
   const options = new firefox.Options()
     .setPreference('browser.shell.checkDefaultBrowser', false)
@@ -192,13 +337,26 @@ async function startFirefoxBrowser() {
   }
 
   const geckodriverPath = envValue(['GECKODRIVER_PATH']);
-  const service = new firefox.ServiceBuilder(geckodriverPath || undefined);
-
-  const driver = await new webdriver.Builder()
-    .forBrowser('firefox')
-    .setFirefoxOptions(options)
-    .setFirefoxService(service)
-    .build();
+  const { driver } = await browserLifecycle.acquire(
+    'firefox-session',
+    async () => {
+      const service = new firefox.ServiceBuilder(geckodriverPath || undefined).build();
+      try {
+        const acquiredDriver = firefox.Driver.createSession(options, service);
+        await acquiredDriver.getSession();
+        return { driver: acquiredDriver, service };
+      } catch (error) {
+        await service.kill().catch(() => {});
+        throw error;
+      }
+    },
+    async (session) => {
+      if (!preserveBrowser) {
+        await closeFirefoxSession(session);
+      }
+    },
+  );
+  throwIfShutdownRequested();
 
   await driver.manage().window().setRect({ width: 1200, height: 800, x: 80, y: 80 });
   const capabilities = await driver.getCapabilities();
@@ -207,7 +365,6 @@ async function startFirefoxBrowser() {
   page = seleniumPageAdapter(driver);
   browserSession = {
     version: () => version,
-    close: () => driver.quit(),
   };
   await installTestPage(page);
 }
@@ -1017,47 +1174,49 @@ async function installTestPage(targetPage) {
 }
 
 async function startServer() {
-  server = http.createServer((request, response) => {
-    if (request.method === 'GET' && request.url === '/ready') {
-      writeJSON(response, 200, { ok: true, runId, runDir });
-      return;
-    }
+  server = await runtimeLifecycle.acquire(
+    'observer-http-server',
+    async () => {
+      const acquiredServer = http.createServer((request, response) => {
+        if (request.method === 'GET' && request.url === '/ready') {
+          writeJSON(response, 200, { ok: true, runId, runDir });
+          return;
+        }
 
-    if (request.method === 'POST' && request.url === '/finish') {
-      readBody(request)
-        .then((body) => {
-          let payload = {};
-          if (body.length > 0) {
-            payload = JSON.parse(body);
-          }
-          return finalize({
-            reason: payload.reason ?? 'finish',
-            driverExitCode: Number(payload.driver_exit_code ?? 0),
-          });
-        })
-        .then((result) => {
-          writeJSON(response, 200, result);
-          server.close(() => {
-            process.exit(result.ok ? 0 : 2);
-          });
-        })
-        .catch((error) => {
-          writeJSON(response, 500, { ok: false, error: String(error?.stack ?? error) });
-          server.close(() => process.exit(1));
+        if (request.method === 'POST' && request.url === '/finish') {
+          readBody(request)
+            .then((body) => {
+              let payload = {};
+              if (body.length > 0) {
+                payload = JSON.parse(body);
+              }
+              requestObserverShutdown({
+                reason: payload.reason ?? 'finish',
+                driverExitCode: Number(payload.driver_exit_code ?? 0),
+                response,
+              });
+            })
+            .catch((error) => {
+              writeJSON(response, 400, { ok: false, error: String(error?.stack ?? error) });
+            });
+          return;
+        }
+
+        writeJSON(response, 404, { ok: false, error: 'not found' });
+      });
+
+      await new Promise((resolve, reject) => {
+        acquiredServer.once('error', reject);
+        acquiredServer.listen(observerPort, '127.0.0.1', () => {
+          acquiredServer.off('error', reject);
+          resolve();
         });
-      return;
-    }
-
-    writeJSON(response, 404, { ok: false, error: 'not found' });
-  });
-
-  await new Promise((resolve, reject) => {
-    server.once('error', reject);
-    server.listen(observerPort, '127.0.0.1', () => {
-      server.off('error', reject);
-      resolve();
-    });
-  });
+      });
+      return acquiredServer;
+    },
+    closeHttpServer,
+  );
+  throwIfShutdownRequested();
 }
 
 async function writeReadyFile() {
@@ -1113,11 +1272,6 @@ function writeJSON(response, statusCode, value) {
 }
 
 async function finalize({ reason, driverExitCode }) {
-  if (finalized) {
-    return { ok: true, already_finalized: true };
-  }
-  finalized = true;
-
   const domEvents = page ? await page.evaluate(() => window.__hisleEvents ?? []) : [];
   await writeJSONLines(path.join(runDir, 'dom-events.jsonl'), domEvents);
   const chaosEvents = page ? await page.evaluate(() => window.__hisleChaosEvents ?? []) : [];
@@ -1216,14 +1370,6 @@ async function finalize({ reason, driverExitCode }) {
 
   if (page) {
     await page.screenshot({ path: path.join(runDir, 'screenshot.png'), fullPage: true });
-  }
-
-  if (browserSession?.stopTracing) {
-    await browserSession.stopTracing(path.join(runDir, 'trace.zip'));
-  }
-
-  if (!keepOpen && browserSession) {
-    await browserSession.close();
   }
 
   const ok = driverExitCode === 0 && finalState.matches_expected_value === true;

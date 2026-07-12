@@ -145,10 +145,13 @@ Useful environment options:
 
 - `SEED`, default `1`.
 - `ITERATIONS`, default `1`.
-- `RUN_ID`, default timestamp plus a short random suffix.
+- `RUN_ID`, default timestamp plus a short random suffix. It must name a fresh
+  run directory; the wrapper refuses to overwrite an existing run.
 - `CHROME_PATH`, optional path to Chrome or Chrome for Testing.
 - `CHROME_REMOTE_DEBUGGING_PORT`, optional fixed Chrome remote debugging port.
-- `HISLE_CHROME_KEEP_OPEN=1`, leave Chrome open after artifact capture.
+- `HISLE_CHROME_KEEP_OPEN=1` is retained for compatibility, but the
+  Playwright-owned local Chrome closes after artifact capture so its profile
+  lock cannot outlive the observer.
 - `HISLE_CHROME_TARGET`, one of `textarea`, `contenteditable`, or `wysiwyg`;
   default `textarea`.
 - `HISLE_CHROME_SCENARIO`, one of `standard`, `click-during-composition`,
@@ -279,8 +282,35 @@ missing. The recorder test launches the installed Chrome in headless mode and
 synthetically dispatches browser-native DOM event objects for keyboard,
 composition, input, and document `selectionchange`. It checks their serialized
 payloads, the mutation-aware bounded caret-context snapshot contract, and page
-errors. Set `CHROME_PATH` to use a non-default Chrome executable. The same
-command also runs the deterministic Confluence page-identity tests.
+errors. It also checks observer cleanup ordering and idempotence, HTTP port
+release, Firefox/geckodriver fallback cleanup, owned versus reused CDP Chrome,
+fresh run-directory collision handling, and wrapper job cleanup. Set
+`CHROME_PATH` to use a non-default Chrome executable. The same command also runs
+the deterministic Confluence page-identity tests.
+
+### Browser Repro Lifecycle
+
+The Chrome, Firefox, and live Confluence wrappers atomically create each run
+directory and reject an existing `RUN_ID` without changing its artifacts. Once
+an observer job starts, a small supervisor watches the wrapper process and owns
+the observer's detached process group. Wrapper success, errors, Ctrl-C,
+`SIGTERM`, and `SIGHUP` all pass through bounded cleanup. The supervisor
+forwards the signal to the observer group, allows up to eight seconds for
+graceful cleanup, then sends `SIGKILL` to any surviving observer, browser, or
+driver descendants. The Nushell `finally` path gives the supervisor up to ten
+seconds before stopping a remaining job.
+
+Observers close their HTTP server, trace, browser session, and owned child
+processes even when setup or artifact finalization fails. Firefox cleanup tries
+both `driver.quit()` and geckodriver service termination. A normal Chrome
+started by the Confluence observer is owned and receives the CDP
+`Browser.close` command; a browser selected with
+`HISLE_ATLASSIAN_REUSE_CHROME=1` is externally owned and is only disconnected.
+`HISLE_FIREFOX_KEEP_OPEN` and the normal-Chrome
+`HISLE_ATLASSIAN_KEEP_OPEN` path transfer browser ownership only after a
+successful finish. Playwright-owned Chrome contexts always close. Setup,
+finalization, and wrapper failures still close an owned browser and release its
+port and profile lock.
 
 ## Firefox IME Reproduction
 
@@ -442,9 +472,12 @@ Useful environment options:
   text, URLs, and screenshots.
 - `CHROME_PATH`, optional path to Chrome or Chrome for Testing.
 - `CHROME_REMOTE_DEBUGGING_PORT`, optional fixed Chrome remote debugging port.
+  A new Confluence Chrome requires an unused port and verifies that the CDP
+  endpoint uses the configured profile; reuse mode expects an existing port.
 - `HISLE_ATLASSIAN_REUSE_CHROME=1`, connect to an already-open Chrome on
   `CHROME_REMOTE_DEBUGGING_PORT` instead of launching a new one.
-- `RUN_ID`, stable run directory name under `local/atlassian/runs/`.
+- `RUN_ID`, stable run directory name under `local/atlassian/runs/`. It must be
+  unused; the wrapper preserves and rejects an existing run directory.
 
 For every scenario, success requires the final DOM Range text to equal the
 captured initial text with the exact expected document delta inserted at the

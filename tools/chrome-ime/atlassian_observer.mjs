@@ -1,6 +1,7 @@
 import { chromium } from 'playwright-core';
 import { spawn } from 'node:child_process';
 import http from 'node:http';
+import net from 'node:net';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
@@ -12,6 +13,11 @@ import {
   hasSameConfluencePageIdentity,
 } from './atlassian_page_identity.mjs';
 import { expectedDocumentState } from './atlassian_scenario_contract.mjs';
+import {
+  ObserverLifecycle,
+  closeConnectedChromium,
+  closeHttpServer,
+} from './observer_lifecycle.mjs';
 
 const runDir = requiredEnv('RUN_DIR');
 const profileDir = requiredEnv('ATLASSIAN_PROFILE_DIR');
@@ -35,20 +41,58 @@ const configuredWindowTitleContains = process.env.HISLE_ATLASSIAN_WINDOW_TITLE_C
 const initialCaretOffsetText = process.env.HISLE_ATLASSIAN_INITIAL_CARET_OFFSET ?? '';
 const readyFile = path.join(runDir, 'observer-ready.json');
 const pidFile = path.join(runDir, 'observer.pid');
+const supervisorPID = processIDFromEnv('HISLE_SUPERVISOR_PID');
+const controlPID = supervisorPID ?? process.pid;
 
 let context;
 let browser;
 let page;
 let server;
-let finalized = false;
 let connectedToNormalChrome = false;
+let ownsNormalChrome = false;
+let normalChromeProcess;
+let preserveBrowser = false;
+let shutdownRequest = null;
+let resolveShutdown;
+let setupComplete = false;
+let runClaimed = false;
+let cleanupPromise = null;
+const runtimeLifecycle = new ObserverLifecycle();
+const browserLifecycle = new ObserverLifecycle();
+const shutdownPromise = new Promise((resolve) => {
+  resolveShutdown = resolve;
+});
 const consoleRecords = [];
 
-await fs.mkdir(runDir, { recursive: true });
-await fs.mkdir(profileDir, { recursive: true });
-await fs.writeFile(pidFile, `${process.pid}\n`, 'utf8');
+for (const [signal, driverExitCode, signalExitCode] of [
+  ['SIGTERM', 143, 143],
+  ['SIGINT', loginOnly ? 0 : 130, loginOnly ? 0 : 130],
+  ['SIGHUP', 129, 129],
+]) {
+  process.on(signal, () => {
+    requestObserverShutdown({
+      reason: signal.toLowerCase(),
+      driverExitCode,
+      exitCode: signalExitCode,
+    });
+  });
+}
+process.on('uncaughtException', (error) => {
+  requestObserverShutdown({ reason: 'uncaught-exception', driverExitCode: 1, exitCode: 1, error });
+});
+process.on('unhandledRejection', (reason) => {
+  const error = reason instanceof Error ? reason : new Error(String(reason));
+  requestObserverShutdown({ reason: 'unhandled-rejection', driverExitCode: 1, exitCode: 1, error });
+});
 
+let exitCode = 1;
 try {
+  await fs.mkdir(runDir, { recursive: true });
+  await fs.mkdir(profileDir, { recursive: true });
+  await fs.writeFile(pidFile, `${controlPID}\n`, { encoding: 'utf8', flag: 'wx' });
+  runClaimed = true;
+  startSupervisorWatchdog();
+
   if (!loginOnly) {
     requiredRequestedPageIdentity();
   }
@@ -60,6 +104,7 @@ try {
   }
 
   await writeReadyFile();
+  setupComplete = true;
   const mode = loginOnly ? 'login profile' : 'Confluence editor';
   console.log(`Atlassian observer ready for ${mode} on http://127.0.0.1:${server.address().port}`);
 
@@ -67,21 +112,61 @@ try {
     console.log(`Profile directory: ${profileDir}`);
     console.log('Complete the browser sign-in, then press Ctrl-C in this terminal to close the observer.');
   }
+
+  const request = await shutdownPromise;
+  if (request.error) {
+    throw request.error;
+  }
+  const result = await finalize({
+    reason: request.reason,
+    driverExitCode: request.driverExitCode,
+  });
+  preserveBrowser = Boolean(request.response) && keepOpen && result.ok;
+  if (request.response) {
+    writeJSON(request.response, 200, result);
+  }
+  exitCode = request.exitCode ?? (result.ok ? 0 : 2);
 } catch (error) {
-  await writeFailureState(error);
+  if (runClaimed) {
+    await writeFailureState(error).catch((writeError) => {
+      console.error(writeError?.stack ?? String(writeError));
+    });
+  }
+  if (shutdownRequest?.response && !shutdownRequest.response.headersSent) {
+    writeJSON(shutdownRequest.response, 500, {
+      ok: false,
+      error: String(error?.stack ?? error),
+    });
+  }
   console.error(error?.stack ?? String(error));
-  process.exit(1);
+  exitCode = shutdownRequest?.exitCode ?? 1;
+} finally {
+  const cleanup = await disposeResources();
+  for (const failure of cleanup.errors) {
+    console.error(`Cleanup failed (${failure.label}): ${failure.error?.stack ?? failure.error}`);
+  }
+  if (cleanup.errors.length > 0 && exitCode === 0) {
+    exitCode = 1;
+  }
 }
 
-process.on('SIGTERM', () => {
-  finalize({ reason: 'sigterm', driverExitCode: 143 })
-    .finally(() => process.exit(143));
-});
+process.exit(exitCode);
 
-process.on('SIGINT', () => {
-  finalize({ reason: 'sigint', driverExitCode: loginOnly ? 0 : 130 })
-    .finally(() => process.exit(loginOnly ? 0 : 130));
-});
+function requestObserverShutdown(request) {
+  if (shutdownRequest) {
+    if (request.response && !request.response.headersSent) {
+      writeJSON(request.response, 409, { ok: false, error: 'observer shutdown already requested' });
+    }
+    return false;
+  }
+
+  shutdownRequest = request;
+  resolveShutdown(request);
+  if (!setupComplete) {
+    void disposeResources();
+  }
+  return true;
+}
 
 function requiredEnv(name) {
   const value = process.env[name];
@@ -98,6 +183,67 @@ function numberFromEnv(name, fallback) {
   }
   const value = Number(text);
   return Number.isFinite(value) ? value : fallback;
+}
+
+function processIDFromEnv(name) {
+  const text = process.env[name] ?? '';
+  if (!text) {
+    return null;
+  }
+  const value = Number(text);
+  if (!Number.isInteger(value) || value <= 0) {
+    throw new Error(`${name} must be a positive process ID.`);
+  }
+  return value;
+}
+
+function throwIfShutdownRequested() {
+  if (cleanupPromise) {
+    throw new Error(`Observer shutdown requested during setup: ${shutdownRequest?.reason ?? 'unknown'}`);
+  }
+}
+
+function startSupervisorWatchdog() {
+  if (!supervisorPID) {
+    return;
+  }
+  if (process.ppid !== supervisorPID) {
+    throw new Error(`Observer supervisor mismatch: expected parent ${supervisorPID}, got ${process.ppid}.`);
+  }
+
+  const watchdog = setInterval(() => {
+    if (process.ppid !== supervisorPID || !processIsAlive(supervisorPID)) {
+      requestObserverShutdown({
+        reason: 'supervisor-exited',
+        driverExitCode: 1,
+        exitCode: 1,
+      });
+    }
+  }, 250);
+  runtimeLifecycle.defer('supervisor-watchdog', () => clearInterval(watchdog));
+}
+
+function processIsAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function disposeResources() {
+  if (!cleanupPromise) {
+    cleanupPromise = (async () => {
+      const runtimeCleanup = await runtimeLifecycle.dispose();
+      if (runtimeCleanup.errors.length > 0) {
+        preserveBrowser = false;
+      }
+      const browserCleanup = await browserLifecycle.dispose();
+      return { errors: [...runtimeCleanup.errors, ...browserCleanup.errors] };
+    })();
+  }
+  return cleanupPromise;
 }
 
 function initialCaretOffsetFromText(text) {
@@ -140,12 +286,25 @@ async function startBrowser() {
     launchOptions.args.push(`--remote-debugging-port=${remoteDebuggingPort}`);
   }
 
-  context = await chromium.launchPersistentContext(profileDir, launchOptions);
+  context = await browserLifecycle.acquire(
+    'chromium-context',
+    () => chromium.launchPersistentContext(profileDir, launchOptions),
+    (acquiredContext) => acquiredContext.close(),
+  );
+  throwIfShutdownRequested();
   browser = context.browser();
   context.on('page', wirePage);
 
   if (traceEnabled) {
-    await context.tracing.start({ screenshots: true, snapshots: true, sources: false });
+    await runtimeLifecycle.acquire(
+      'chromium-trace',
+      async () => {
+        await context.tracing.start({ screenshots: true, snapshots: true, sources: false });
+        return context.tracing;
+      },
+      (tracing) => tracing.stop({ path: path.join(runDir, 'trace.zip') }),
+    );
+    throwIfShutdownRequested();
   }
 
   page = context.pages()[0] ?? await context.newPage();
@@ -165,6 +324,7 @@ async function startNormalChromeBrowser() {
     `--remote-debugging-port=${remoteDebuggingPort}`,
     '--no-first-run',
     '--no-default-browser-check',
+    '--enable-automation',
     requestedPageURL,
   ];
 
@@ -172,16 +332,41 @@ async function startNormalChromeBrowser() {
   if (reuseNormalChrome) {
     await waitForCDP(cdpURL);
   } else {
-    if (chromePath) {
-      spawn(chromePath, chromeArgs, { detached: true, stdio: 'ignore' }).unref();
-    } else {
-      spawn('/usr/bin/open', ['-na', chromeApp, '--args', ...chromeArgs], { detached: true, stdio: 'ignore' }).unref();
-    }
-
+    await assertCDPPortAvailable(remoteDebuggingPort);
+    normalChromeProcess = await browserLifecycle.acquire(
+      'normal-chrome-process',
+      async () => {
+        const executable = await normalChromeExecutable();
+        const child = spawn(executable, chromeArgs, { stdio: 'ignore' });
+        await new Promise((resolve, reject) => {
+          child.once('spawn', resolve);
+          child.once('error', reject);
+        });
+        return child;
+      },
+      async (child) => {
+        if (!preserveBrowser) {
+          await stopNormalChromeProcess(child);
+        }
+      },
+    );
+    throwIfShutdownRequested();
     await waitForCDP(cdpURL);
   }
-  browser = await chromium.connectOverCDP(cdpURL);
+  browser = await browserLifecycle.acquire(
+    'connected-chromium',
+    () => chromium.connectOverCDP(cdpURL),
+    (connectedBrowser) => closeConnectedChromium({
+      browser: connectedBrowser,
+      owned: ownsNormalChrome && !preserveBrowser,
+    }),
+  );
+  throwIfShutdownRequested();
   connectedToNormalChrome = true;
+  if (normalChromeProcess) {
+    await verifyOwnedNormalChrome(browser);
+    ownsNormalChrome = true;
+  }
   context = browser.contexts()[0];
   if (!context) {
     throw new Error('Could not find the default Chrome context after connecting over CDP.');
@@ -189,7 +374,14 @@ async function startNormalChromeBrowser() {
   context.on('page', wirePage);
 
   if (traceEnabled) {
-    await context.tracing.start({ screenshots: true, snapshots: true, sources: false }).catch((error) => {
+    await runtimeLifecycle.acquire(
+      'chromium-trace',
+      async () => {
+        await context.tracing.start({ screenshots: true, snapshots: true, sources: false });
+        return context.tracing;
+      },
+      (tracing) => tracing.stop({ path: path.join(runDir, 'trace.zip') }),
+    ).catch((error) => {
       consoleRecords.push({
         wall_clock_timestamp: new Date().toISOString(),
         type: 'trace-start-error',
@@ -197,6 +389,7 @@ async function startNormalChromeBrowser() {
         location: null,
       });
     });
+    throwIfShutdownRequested();
   }
 
   page = await pageForRequestedURL(context);
@@ -211,6 +404,7 @@ async function waitForCDP(cdpURL) {
   let lastError = null;
 
   while (Date.now() < deadline) {
+    throwIfShutdownRequested();
     try {
       const response = await fetch(`${cdpURL}/json/version`);
       if (response.ok) {
@@ -224,6 +418,92 @@ async function waitForCDP(cdpURL) {
   }
 
   throw new Error(`Timed out waiting for Chrome CDP endpoint at ${cdpURL}: ${lastError}`);
+}
+
+async function assertCDPPortAvailable(portText) {
+  const port = Number(portText);
+  if (!Number.isInteger(port) || port <= 0 || port > 65535) {
+    throw new Error(`CHROME_REMOTE_DEBUGGING_PORT must be an unused TCP port: ${portText}`);
+  }
+
+  await new Promise((resolve, reject) => {
+    const socket = net.createConnection({ host: '127.0.0.1', port });
+    const timeout = setTimeout(() => {
+      socket.destroy();
+      reject(new Error(`Could not verify that Chrome remote debugging port ${port} is unused.`));
+    }, 1000);
+    socket.once('connect', () => {
+      clearTimeout(timeout);
+      socket.destroy();
+      reject(new Error(`Chrome remote debugging port ${port} is already in use.`));
+    });
+    socket.once('error', (error) => {
+      clearTimeout(timeout);
+      socket.destroy();
+      if (error?.code === 'ECONNREFUSED') {
+        resolve();
+      } else {
+        reject(error);
+      }
+    });
+  });
+}
+
+async function verifyOwnedNormalChrome(connectedBrowser) {
+  const session = await connectedBrowser.newBrowserCDPSession();
+  try {
+    const commandLine = await session.send('Browser.getBrowserCommandLine');
+    const expectedProfileArgument = `--user-data-dir=${profileDir}`;
+    if (!commandLine.arguments?.includes(expectedProfileArgument)) {
+      throw new Error('Connected Chrome does not own the configured Atlassian profile.');
+    }
+  } finally {
+    await session.detach().catch(() => {});
+  }
+}
+
+async function normalChromeExecutable() {
+  if (chromePath) {
+    return chromePath;
+  }
+
+  const appName = chromeApp.endsWith('.app') ? chromeApp.slice(0, -4) : chromeApp;
+  const candidates = [
+    path.join('/Applications', `${appName}.app`, 'Contents', 'MacOS', appName),
+    path.join(process.env.HOME ?? '', 'Applications', `${appName}.app`, 'Contents', 'MacOS', appName),
+  ];
+  for (const candidate of candidates) {
+    try {
+      await fs.access(candidate);
+      return candidate;
+    } catch {
+      // Try the next standard application location.
+    }
+  }
+
+  throw new Error(`Could not resolve ${chromeApp}; set CHROME_PATH to the Chrome executable.`);
+}
+
+async function stopNormalChromeProcess(child = normalChromeProcess) {
+  if (!child || child.exitCode !== null || child.signalCode !== null) {
+    return;
+  }
+
+  child.kill('SIGTERM');
+  if (!await waitForProcessExit(child, 5000)) {
+    child.kill('SIGKILL');
+    if (!await waitForProcessExit(child, 2000)) {
+      throw new Error(`Owned Chrome process ${child.pid ?? 'unknown'} did not exit after SIGKILL.`);
+    }
+  }
+}
+
+async function waitForProcessExit(child, timeoutMilliseconds) {
+  const deadline = Date.now() + timeoutMilliseconds;
+  while (child.exitCode === null && child.signalCode === null && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  return child.exitCode !== null || child.signalCode !== null;
 }
 
 async function pageForRequestedURL(targetContext) {
@@ -634,65 +914,67 @@ async function installConfluenceInstrumentation(targetHandle) {
 }
 
 async function startServer() {
-  server = http.createServer((request, response) => {
-    if (request.method === 'GET' && request.url === '/ready') {
-      try {
-        if (!loginOnly) {
-          requireConfiguredPageIdentity('confirm readiness for the HID driver');
-        }
-        writeJSON(response, 200, { ok: true, runId, runDir });
-      } catch (error) {
-        writeJSON(response, 409, { ok: false, error: String(error?.stack ?? error) });
-      }
-      return;
-    }
-
-    if (request.method === 'POST' && request.url === '/place-caret') {
-      placeConfiguredCaret()
-        .then((result) => {
-          writeJSON(response, 200, { ok: true, ...result });
-        })
-        .catch((error) => {
-          writeJSON(response, 500, { ok: false, error: String(error?.stack ?? error) });
-        });
-      return;
-    }
-
-    if (request.method === 'POST' && request.url === '/finish') {
-      readBody(request)
-        .then((body) => {
-          let payload = {};
-          if (body.length > 0) {
-            payload = JSON.parse(body);
+  server = await runtimeLifecycle.acquire(
+    'observer-http-server',
+    async () => {
+      const acquiredServer = http.createServer((request, response) => {
+        if (request.method === 'GET' && request.url === '/ready') {
+          try {
+            if (!loginOnly) {
+              requireConfiguredPageIdentity('confirm readiness for the HID driver');
+            }
+            writeJSON(response, 200, { ok: true, runId, runDir });
+          } catch (error) {
+            writeJSON(response, 409, { ok: false, error: String(error?.stack ?? error) });
           }
-          return finalize({
-            reason: payload.reason ?? 'finish',
-            driverExitCode: Number(payload.driver_exit_code ?? 0),
-          });
-        })
-        .then((result) => {
-          writeJSON(response, 200, result);
-          server.close(() => {
-            process.exit(result.ok ? 0 : 2);
-          });
-        })
-        .catch((error) => {
-          writeJSON(response, 500, { ok: false, error: String(error?.stack ?? error) });
-          server.close(() => process.exit(1));
+          return;
+        }
+
+        if (request.method === 'POST' && request.url === '/place-caret') {
+          placeConfiguredCaret()
+            .then((result) => {
+              writeJSON(response, 200, { ok: true, ...result });
+            })
+            .catch((error) => {
+              writeJSON(response, 500, { ok: false, error: String(error?.stack ?? error) });
+            });
+          return;
+        }
+
+        if (request.method === 'POST' && request.url === '/finish') {
+          readBody(request)
+            .then((body) => {
+              let payload = {};
+              if (body.length > 0) {
+                payload = JSON.parse(body);
+              }
+              requestObserverShutdown({
+                reason: payload.reason ?? 'finish',
+                driverExitCode: Number(payload.driver_exit_code ?? 0),
+                response,
+              });
+            })
+            .catch((error) => {
+              writeJSON(response, 400, { ok: false, error: String(error?.stack ?? error) });
+            });
+          return;
+        }
+
+        writeJSON(response, 404, { ok: false, error: 'not found' });
+      });
+
+      await new Promise((resolve, reject) => {
+        acquiredServer.once('error', reject);
+        acquiredServer.listen(observerPort, '127.0.0.1', () => {
+          acquiredServer.off('error', reject);
+          resolve();
         });
-      return;
-    }
-
-    writeJSON(response, 404, { ok: false, error: 'not found' });
-  });
-
-  await new Promise((resolve, reject) => {
-    server.once('error', reject);
-    server.listen(observerPort, '127.0.0.1', () => {
-      server.off('error', reject);
-      resolve();
-    });
-  });
+      });
+      return acquiredServer;
+    },
+    closeHttpServer,
+  );
+  throwIfShutdownRequested();
 }
 
 async function placeConfiguredCaret() {
@@ -898,11 +1180,6 @@ function writeJSON(response, statusCode, value) {
 }
 
 async function finalize({ reason, driverExitCode }) {
-  if (finalized) {
-    return { ok: true, already_finalized: true };
-  }
-  finalized = true;
-
   const domEvents = page ? await page.evaluate(() => {
     const instrumentation = window.__hisleAtlassian;
     const events = instrumentation?.events ?? [];
@@ -993,18 +1270,6 @@ async function finalize({ reason, driverExitCode }) {
 
   if (page) {
     await page.screenshot({ path: path.join(runDir, 'screenshot.png'), fullPage: true }).catch(() => {});
-  }
-
-  if (traceEnabled && context) {
-    await context.tracing.stop({ path: path.join(runDir, 'trace.zip') }).catch(() => {});
-  }
-
-  if (!keepOpen) {
-    if (connectedToNormalChrome && browser) {
-      await browser.close().catch(() => {});
-    } else if (context) {
-      await context.close().catch(() => {});
-    }
   }
 
   const ok = loginOnly ||

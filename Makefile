@@ -125,6 +125,7 @@ browser-observer-check: require-browser-shell
 		fi; \
 	fi
 	$(NPM) --prefix '$(BROWSER_OBSERVER_DIR)' test
+	$(NU) tools/browser_repro_support_check.nu
 
 build: require-app-shell
 	$(XCODEBUILD) \
