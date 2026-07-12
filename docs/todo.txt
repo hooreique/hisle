@@ -121,7 +121,7 @@ Performance, privacy, and cleanup
   fallback; unused observer `ok`; obsolete email/login plumbing; unused cleanup
   job handles.
 
-- [ ] Add a no-mark fast path for plain commits.
+- [x] Add a no-mark fast path for plain commits.
   MarkedTextRangePolicy.replacementDecision needlessly calls selectedRange() and
   markedRange() for Roman/plain punctuation input. This predates the reviewed
   chain, so treat it as cleanup, not a demonstrated recent regression.

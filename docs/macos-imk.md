@@ -127,9 +127,12 @@ marked-text update after a composition commit. Ordinary committed text with no
 active marked text must still use the current-selection sentinel and must not
 create or preserve an owned insertion range, because browser and rich-editor
 clients can report unstable explicit document ranges during plain Roman or
-standalone punctuation input. Clear owned ranges on user or host actions that
-can legitimately move the caret: mouse down, host-forwarded navigation/action
-keys, mode changes, deactivation, and external cancel/commit boundaries.
+standalone punctuation input. Do not query `selectedRange()` or `markedRange()`
+to make that plain-commit decision; the commit replacement decision reads those
+host ranges only while active marked text is being committed. Clear owned ranges
+on user or host actions that can legitimately move the caret: mouse down,
+host-forwarded navigation/action keys, mode changes, deactivation, and external
+cancel/commit boundaries.
 
 After `insertText(_:replacementRange:)` for an active composition commit, prefer
 a valid collapsed `selectedRange()` from the client as the next owned insertion

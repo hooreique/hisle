@@ -14,7 +14,8 @@ nix develop --command -- make marked-range-policy-check
 The check compiles the production `MarkedTextRangePolicy` with a focused Swift
 runner. It verifies exact non-collapsed range equality, the supported collapsed
 caret positions, stale selections that share only one boundary, invalid ranges,
-and integer overflow.
+integer overflow, and that plain commits avoid host range reads while active
+marked-text commits still read both ranges.
 
 ## GUI Smoke Test
 

@@ -23,7 +23,8 @@ struct PendingMarkedTextReplacement {
 
 enum MarkedTextRangePolicy {
     static let policyID = "current-selection-nsnotfound+split-boundary+" +
-        "deferred-boundary+strict-selection-consistency+conditional-postcommit-caret"
+        "deferred-boundary+plain-commit-fast-path+strict-selection-consistency+" +
+        "conditional-postcommit-caret"
 
     static var currentSelectionReplacementRange: NSRange {
         NSRange(location: NSNotFound, length: 0)
@@ -42,12 +43,23 @@ enum MarkedTextRangePolicy {
         hasMarkedText: Bool,
         ownedMarkedRange: NSRange?,
         ownedInsertionRange: NSRange?,
-        client: IMKTextInput
+        selectedRange selectedRangeProvider: @autoclosure () -> NSRange,
+        markedRange markedRangeProvider: @autoclosure () -> NSRange
     ) -> MarkedTextReplacementDecision {
-        let selectedRange = client.selectedRange()
-        let markedRange = client.markedRange()
+        guard hasMarkedText else {
+            let unqueriedRange = currentSelectionReplacementRange
+            return MarkedTextReplacementDecision(
+                replacementRange: currentSelectionReplacementRange,
+                selectedRange: unqueriedRange,
+                markedRange: unqueriedRange,
+                reason: .currentSelection
+            )
+        }
 
-        if hasMarkedText, markedRange.location != NSNotFound, markedRange.length > 0 {
+        let selectedRange = selectedRangeProvider()
+        let markedRange = markedRangeProvider()
+
+        if markedRange.location != NSNotFound, markedRange.length > 0 {
             let replacementRange = ownedMarkedRange ?? markedRange
             return MarkedTextReplacementDecision(
                 replacementRange: replacementRange,
@@ -57,7 +69,7 @@ enum MarkedTextRangePolicy {
             )
         }
 
-        if hasMarkedText, let ownedMarkedRange {
+        if let ownedMarkedRange {
             return MarkedTextReplacementDecision(
                 replacementRange: ownedMarkedRange,
                 selectedRange: selectedRange,

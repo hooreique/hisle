@@ -209,7 +209,8 @@ extension InputController {
             hasMarkedText: markedText.isActive,
             ownedMarkedRange: markedTextRangeTracker.markedRange,
             ownedInsertionRange: markedTextRangeTracker.insertionRange,
-            client: client
+            selectedRange: client.selectedRange(),
+            markedRange: client.markedRange()
         )
 #if DEBUG
         ClientRangeTracer(logger: logger).traceReplacementRange(decision, markedText: markedText)

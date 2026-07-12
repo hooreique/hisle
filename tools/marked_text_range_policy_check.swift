@@ -18,6 +18,10 @@ private struct SelectionConsistencyFailure: Error, CustomStringConvertible {
     }
 }
 
+private struct ReplacementDecisionFailure: Error, CustomStringConvertible {
+    let description: String
+}
+
 @main
 private enum MarkedTextRangePolicyCheck {
     private static let examples = [
@@ -144,6 +148,9 @@ private enum MarkedTextRangePolicyCheck {
     ]
 
     static func main() throws {
+        try checkPlainCommitFastPath()
+        try checkActiveMarkedTextRangeReads()
+
         for example in examples {
             let actual = MarkedTextRangePolicy.isSelectionRange(
                 example.selectedRange,
@@ -154,6 +161,90 @@ private enum MarkedTextRangePolicyCheck {
             }
         }
 
-        print("Marked text range policy check passed \(examples.count) examples.")
+        print(
+            "Marked text range policy check passed \(examples.count) selection examples " +
+                "and 2 replacement-decision examples."
+        )
+    }
+
+    private static func checkPlainCommitFastPath() throws {
+        var selectedRangeReadCount = 0
+        var markedRangeReadCount = 0
+
+        func readSelectedRange() -> NSRange {
+            selectedRangeReadCount += 1
+            return NSRange(location: 40, length: 2)
+        }
+
+        func readMarkedRange() -> NSRange {
+            markedRangeReadCount += 1
+            return NSRange(location: 40, length: 2)
+        }
+
+        let decision = MarkedTextRangePolicy.replacementDecision(
+            hasMarkedText: false,
+            ownedMarkedRange: NSRange(location: 30, length: 2),
+            ownedInsertionRange: NSRange(location: 32, length: 0),
+            selectedRange: readSelectedRange(),
+            markedRange: readMarkedRange()
+        )
+        let currentSelection = MarkedTextRangePolicy.currentSelectionReplacementRange
+
+        guard selectedRangeReadCount == 0, markedRangeReadCount == 0 else {
+            throw ReplacementDecisionFailure(
+                description: "plain commit read client ranges: " +
+                    "selected=\(selectedRangeReadCount) marked=\(markedRangeReadCount)"
+            )
+        }
+        guard decision.replacementRange == currentSelection,
+              decision.selectedRange == currentSelection,
+              decision.markedRange == currentSelection,
+              decision.reason.rawValue == MarkedTextRangeReason.currentSelection.rawValue
+        else {
+            throw ReplacementDecisionFailure(
+                description: "plain commit did not return the current-selection decision"
+            )
+        }
+    }
+
+    private static func checkActiveMarkedTextRangeReads() throws {
+        var selectedRangeReadCount = 0
+        var markedRangeReadCount = 0
+        let selectedRange = NSRange(location: 12, length: 0)
+        let markedRange = NSRange(location: 10, length: 3)
+
+        func readSelectedRange() -> NSRange {
+            selectedRangeReadCount += 1
+            return selectedRange
+        }
+
+        func readMarkedRange() -> NSRange {
+            markedRangeReadCount += 1
+            return markedRange
+        }
+
+        let decision = MarkedTextRangePolicy.replacementDecision(
+            hasMarkedText: true,
+            ownedMarkedRange: nil,
+            ownedInsertionRange: nil,
+            selectedRange: readSelectedRange(),
+            markedRange: readMarkedRange()
+        )
+
+        guard selectedRangeReadCount == 1, markedRangeReadCount == 1 else {
+            throw ReplacementDecisionFailure(
+                description: "active marked text did not read each client range once: " +
+                    "selected=\(selectedRangeReadCount) marked=\(markedRangeReadCount)"
+            )
+        }
+        guard decision.replacementRange == markedRange,
+              decision.selectedRange == selectedRange,
+              decision.markedRange == markedRange,
+              decision.reason.rawValue == MarkedTextRangeReason.marked.rawValue
+        else {
+            throw ReplacementDecisionFailure(
+                description: "active marked text did not preserve the host marked-range decision"
+            )
+        }
     }
 }
