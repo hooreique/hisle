@@ -77,3 +77,14 @@ env HISLE_CHROME_SCENARIO='stale-selection-annyeonghaseyo' RUN_ID='chrome-stale-
 nix develop --command -- make swiftlint
 nix develop --command -- make gui-smoke-test
 ```
+
+## Final Integration Recheck
+
+Build 29 retained the Firefox prefix fix after the state-safe deferred-boundary,
+strict-selection-consistency, and plain-commit-fast-path follow-ups. The
+`annyeong-word-repeats` textarea regression produced exactly
+`안녕 안녕 안녕 안녕foo bar`.
+
+Runtime: `hisle 0.1.14-debug`, core `0.1.1`, build `29`.
+Artifact:
+`build/firefox-ime/firefox-annyeong-repeats-final-integration-20260713-0623/`.

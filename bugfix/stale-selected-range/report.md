@@ -36,6 +36,12 @@ The later Confluence cursor-jump fix extends this same policy family to
 `current-selection-nsnotfound+owned-post-insert-caret`; the selected-range
 behavior described here is still part of the current policy.
 
+Final integration on 2026-07-13 rechecked the strong Chrome fixture after the
+state-safe deferred-boundary, strict-selection-consistency, and
+plain-commit-fast-path follow-ups. Installed `hisle 0.1.14-debug`, core `0.1.1`,
+build `29` produced exactly `안녕하세요`. Artifact:
+`build/chrome-ime/chrome-stale-selection-final-integration-20260713-0622/`.
+
 ## User-Visible Shape
 
 Observed failure family:

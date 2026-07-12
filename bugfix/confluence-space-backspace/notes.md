@@ -63,7 +63,7 @@ replacementPolicy=current-selection-nsnotfound+split-boundary+deferred-boundary+
 Runtime identity from the installed debug build:
 
 ```text
-hisle 0.1.13-debug, build 26
+hisle 0.1.14-debug, build 26
 replacementPolicy=current-selection-nsnotfound+split-boundary+deferred-boundary+conditional-postcommit-caret
 bundle=/Users/kia2964158/Library/Input Methods/hisle.app
 ```
@@ -143,13 +143,15 @@ GUI smoke test: passed
 Firefox annyeong-word-repeats: `안녕 안녕 안녕 안녕foo bar` (exact match)
 Chrome stale-selection-annyeonghaseyo: `안녕하세요` (exact match)
 Confluence foo-bar-annyeong-space-backspace: `foo안녕 bar` (exact delta and full-text match)
+Confluence selectionchange events: 21
+Non-null payload counts: key 40, code 40, data 44, inputType 34, isComposing 74
 Confluence observer page errors: 0
 ```
 
 Browser artifacts:
 
 ```text
-build/firefox-ime/firefox-annyeong-repeats-state-safe-20260713-0102/
-build/chrome-ime/chrome-stale-selection-state-safe-20260713-0103/
-local/atlassian/runs/confluence-state-safe-deferred-boundary-20260713-0105/
+build/firefox-ime/firefox-annyeong-repeats-final-integration-20260713-0623/
+build/chrome-ime/chrome-stale-selection-final-integration-20260713-0622/
+local/atlassian/runs/confluence-final-integration-reuse-20260713-0625/
 ```
