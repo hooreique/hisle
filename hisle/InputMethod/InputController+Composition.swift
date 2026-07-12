@@ -74,14 +74,11 @@ extension InputController {
         }
 
         if !output.committedText.isEmpty {
-            let replacementRange = insertCommittedText(output.committedText, client: client, traceAction: "commit")
+            insertCommittedText(output.committedText, client: client, traceAction: "commit")
 
             if !output.markedText.isEmpty {
                 pendingMarkedTextReplacement = markedTextRangeTracker.replacementForMarkedTextUpdate(
                     wasMarkedTextActive: false
-                ) ?? MarkedTextRangePolicy.continuationReplacement(
-                    afterReplacing: replacementRange,
-                    withCommittedText: output.committedText
                 )
             }
         }
@@ -108,7 +105,7 @@ extension InputController {
             return false
         }
 
-        _ = insertCommittedText(text, client: client)
+        insertCommittedText(text, client: client)
         return true
     }
 
@@ -116,7 +113,7 @@ extension InputController {
         _ text: String,
         client: IMKTextInput,
         traceAction: String = "insert"
-    ) -> NSRange {
+    ) {
         let wasMarkedTextActive = markedText.isActive
         let replacementDecision = replacementDecision(for: client)
         let replacementRange = replacementDecision.replacementRange
@@ -144,7 +141,6 @@ extension InputController {
             markedText: markedText
         )
 #endif
-        return replacementRange
     }
 
     private func updateMarkedText(_ text: String, client: IMKTextInput) {
@@ -210,7 +206,6 @@ extension InputController {
         let decision = MarkedTextRangePolicy.replacementDecision(
             hasMarkedText: markedText.isActive,
             ownedMarkedRange: markedTextRangeTracker.markedRange,
-            ownedInsertionRange: markedTextRangeTracker.insertionRange,
             selectedRange: client.selectedRange(),
             markedRange: client.markedRange()
         )

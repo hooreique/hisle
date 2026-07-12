@@ -4,7 +4,6 @@ import InputMethodKit
 enum MarkedTextRangeReason: String {
     case marked
     case currentSelection = "current-selection"
-    case markedContinuation = "marked-continuation"
     case ownedInsertion = "owned-insertion"
     case ownedMarked = "owned-marked"
 }
@@ -42,7 +41,6 @@ enum MarkedTextRangePolicy {
     static func replacementDecision(
         hasMarkedText: Bool,
         ownedMarkedRange: NSRange?,
-        ownedInsertionRange: NSRange?,
         selectedRange selectedRangeProvider: @autoclosure () -> NSRange,
         markedRange markedRangeProvider: @autoclosure () -> NSRange
     ) -> MarkedTextReplacementDecision {
@@ -84,25 +82,6 @@ enum MarkedTextRangePolicy {
             markedRange: markedRange,
             reason: .currentSelection
         )
-    }
-
-    static func continuationReplacement(
-        afterReplacing replacementRange: NSRange,
-        withCommittedText committedText: String
-    ) -> PendingMarkedTextReplacement? {
-        let committedLength = committedText.utf16.count
-
-        if replacementRange.location != NSNotFound {
-            let (location, overflow) = replacementRange.location.addingReportingOverflow(committedLength)
-            if !overflow {
-                return PendingMarkedTextReplacement(
-                    range: NSRange(location: location, length: 0),
-                    reason: .markedContinuation
-                )
-            }
-        }
-
-        return nil
     }
 
     static func isSelectionRange(_ selectedRange: NSRange, consistentWithMarkedRange markedRange: NSRange) -> Bool {
@@ -313,11 +292,6 @@ struct MarkedTextRangeTracker {
         if replacementRange.location != NSNotFound {
             return replacementRange.location
         }
-
-        if let markedRange {
-            return markedRange.location
-        }
-
         return insertionRange?.location
     }
 

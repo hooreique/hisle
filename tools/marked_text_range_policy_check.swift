@@ -184,7 +184,6 @@ private enum MarkedTextRangePolicyCheck {
         let decision = MarkedTextRangePolicy.replacementDecision(
             hasMarkedText: false,
             ownedMarkedRange: NSRange(location: 30, length: 2),
-            ownedInsertionRange: NSRange(location: 32, length: 0),
             selectedRange: readSelectedRange(),
             markedRange: readMarkedRange()
         )
@@ -226,7 +225,6 @@ private enum MarkedTextRangePolicyCheck {
         let decision = MarkedTextRangePolicy.replacementDecision(
             hasMarkedText: true,
             ownedMarkedRange: nil,
-            ownedInsertionRange: nil,
             selectedRange: readSelectedRange(),
             markedRange: readMarkedRange()
         )

@@ -29,8 +29,7 @@ const chromePath = process.env.CHROME_PATH ?? '';
 const chromeApp = process.env.HISLE_ATLASSIAN_CHROME_APP ?? 'Google Chrome';
 const useNormalChrome = process.env.HISLE_ATLASSIAN_NORMAL_CHROME !== '0';
 const reuseNormalChrome = process.env.HISLE_ATLASSIAN_REUSE_CHROME === '1';
-const loginOnly = process.env.HISLE_ATLASSIAN_LOGIN_ONLY === '1';
-const expectedText = loginOnly ? '' : requiredEnv('HISLE_ATLASSIAN_EXPECTED_TEXT');
+const expectedText = requiredEnv('HISLE_ATLASSIAN_EXPECTED_TEXT');
 const targetSelector = process.env.HISLE_ATLASSIAN_TARGET_SELECTOR ?? '';
 const editPage = process.env.HISLE_ATLASSIAN_EDIT !== '0';
 const keepOpen = process.env.HISLE_ATLASSIAN_KEEP_OPEN === '1';
@@ -64,16 +63,16 @@ const shutdownPromise = new Promise((resolve) => {
 });
 const consoleRecords = [];
 
-for (const [signal, driverExitCode, signalExitCode] of [
-  ['SIGTERM', 143, 143],
-  ['SIGINT', loginOnly ? 0 : 130, loginOnly ? 0 : 130],
-  ['SIGHUP', 129, 129],
+for (const [signal, driverExitCode] of [
+  ['SIGTERM', 143],
+  ['SIGINT', 130],
+  ['SIGHUP', 129],
 ]) {
   process.on(signal, () => {
     requestObserverShutdown({
       reason: signal.toLowerCase(),
       driverExitCode,
-      exitCode: signalExitCode,
+      exitCode: driverExitCode,
     });
   });
 }
@@ -93,25 +92,14 @@ try {
   runClaimed = true;
   startSupervisorWatchdog();
 
-  if (!loginOnly) {
-    requiredRequestedPageIdentity();
-  }
+  requiredRequestedPageIdentity();
   await startBrowser();
   await startServer();
-
-  if (!loginOnly) {
-    await prepareConfluenceEditor();
-  }
+  await prepareConfluenceEditor();
 
   await writeReadyFile();
   setupComplete = true;
-  const mode = loginOnly ? 'login profile' : 'Confluence editor';
-  console.log(`Atlassian observer ready for ${mode} on http://127.0.0.1:${server.address().port}`);
-
-  if (loginOnly) {
-    console.log(`Profile directory: ${profileDir}`);
-    console.log('Complete the browser sign-in, then press Ctrl-C in this terminal to close the observer.');
-  }
+  console.log(`Atlassian observer ready for Confluence editor on http://127.0.0.1:${server.address().port}`);
 
   const request = await shutdownPromise;
   if (request.error) {
@@ -920,9 +908,7 @@ async function startServer() {
       const acquiredServer = http.createServer((request, response) => {
         if (request.method === 'GET' && request.url === '/ready') {
           try {
-            if (!loginOnly) {
-              requireConfiguredPageIdentity('confirm readiness for the HID driver');
-            }
+            requireConfiguredPageIdentity('confirm readiness for the HID driver');
             writeJSON(response, 200, { ok: true, runId, runDir });
           } catch (error) {
             writeJSON(response, 409, { ok: false, error: String(error?.stack ?? error) });
@@ -1100,7 +1086,7 @@ async function placeConfiguredCaret() {
 }
 
 async function writeReadyFile() {
-  if (page && !loginOnly) {
+  if (page) {
     requireConfiguredPageIdentity('mark the observer ready for HID input');
   }
 
@@ -1148,7 +1134,6 @@ async function writeReadyFile() {
     remote_debugging_port: remoteDebuggingPort || null,
     normal_chrome: connectedToNormalChrome,
     reused_chrome: reuseNormalChrome,
-    login_only: loginOnly,
     login_state: login,
     edit_page: editPage,
     target_selector: targetSelector || null,
@@ -1272,8 +1257,7 @@ async function finalize({ reason, driverExitCode }) {
     await page.screenshot({ path: path.join(runDir, 'screenshot.png'), fullPage: true }).catch(() => {});
   }
 
-  const ok = loginOnly ||
-    (driverExitCode === 0 && (allowMismatch || finalState.matches_expected_text === true));
+  const ok = driverExitCode === 0 && (allowMismatch || finalState.matches_expected_text === true);
   return {
     ok,
     reason,

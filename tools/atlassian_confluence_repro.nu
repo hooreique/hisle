@@ -124,7 +124,6 @@ let info_parts = if ($info_text | is-empty) {
     $info_text | split row --regex '\s+'
 }
 let info_site_raw = if (($info_parts | length) > 0) { $info_parts | get 0 } else { "" }
-let info_email = if (($info_parts | length) > 1) { $info_parts | get 1 } else { "" }
 let info_site = normalize-url $info_site_raw
 let config_base_url = normalize-url ($config.base_url? | default "")
 let page_url = first-non-empty [
@@ -133,11 +132,6 @@ let page_url = first-non-empty [
     ($config.page_url? | default ""),
     $config_base_url,
     $info_site,
-]
-let email = first-non-empty [
-    ($env.ATLASSIAN_EMAIL? | default ""),
-    ($config.email? | default ""),
-    $info_email,
 ]
 
 if ($page_url | is-empty) {
@@ -256,8 +250,6 @@ let observer_env = {
     HISLE_ATLASSIAN_REUSE_CHROME: ($env.HISLE_ATLASSIAN_REUSE_CHROME? | default "")
     ATLASSIAN_PROFILE_DIR: $profile_dir
     ATLASSIAN_CONFLUENCE_URL: $page_url
-    ATLASSIAN_EMAIL: $email
-    HISLE_ATLASSIAN_LOGIN_ONLY: (if $login_only { "1" } else { "" })
     HISLE_ATLASSIAN_KEEP_OPEN: $keep_open
     HISLE_ATLASSIAN_EXPECTED_TEXT: $expected_text
     HISLE_ATLASSIAN_TARGET_SELECTOR: $target_selector
@@ -400,7 +392,6 @@ let driver_state = if ($driver_state_file | path exists) {
     chrome_path: (maybe-null $chrome_path)
     chrome_version: (if not ($ready.chrome_version? | default "" | is-empty) { $ready.chrome_version } else { maybe-null $chrome_version })
     hisle_cli_version: (maybe-null $hisle_cli_version)
-    atlassian_email_configured: (not ($email | is-empty))
     active_input_source_before_selection: ($driver_state.active_input_source_before_selection? | default null)
     selected_input_source_id: "hooreique.inputmethod.hisle.main"
     observer_readiness_time: ($ready.ready_wall_clock_timestamp? | default null)

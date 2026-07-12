@@ -1372,7 +1372,6 @@ async function finalize({ reason, driverExitCode }) {
     await page.screenshot({ path: path.join(runDir, 'screenshot.png'), fullPage: true });
   }
 
-  const ok = driverExitCode === 0 && finalState.matches_expected_value === true;
   const effectiveOk = driverExitCode === 0 && (allowMismatch || finalState.matches_expected_value === true);
   return {
     ok: effectiveOk,

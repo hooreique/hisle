@@ -386,14 +386,13 @@ Configure the target page with either `ATLASSIAN_CONFLUENCE_URL` or
 
 ```json
 {
-  "page_url": "https://<site>.atlassian.net/wiki/spaces/<space>/pages/<numeric-page-id>/<title>",
-  "email": "<optional login email>"
+  "page_url": "https://<site>.atlassian.net/wiki/spaces/<space>/pages/<numeric-page-id>/<title>"
 }
 ```
 
-The older `local/atlassianinfo` form, `<site> <email>`, is still accepted as a
-fallback for opening the site, but use `page_url` for the live-page repro so the
-observer can navigate directly to the test page.
+The first whitespace-delimited value in the older `local/atlassianinfo` file is
+still accepted as a fallback site URL, but use `page_url` for the live-page
+repro so the observer can navigate directly to the test page.
 
 The observer reuses a browser tab only when its origin and numeric Confluence
 page ID match `page_url`; live edit runs require that numeric ID. The ID remains

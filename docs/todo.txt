@@ -117,11 +117,10 @@ Performance, privacy, and cleanup
   trace opt-in, and use private permissions. A 676-character run produced a
   205 KB DOM log and 4.7 MB trace.
 
-- [ ] Remove confirmed dead code after correctness is stable.
-  Recheck then remove: unused ownedInsertionRange; unreachable
-  continuationReplacement/markedContinuation and startLocationForCommit marked
-  fallback; unused observer `ok`; obsolete email/login plumbing; unused cleanup
-  job handles.
+- [x] Remove confirmed dead code after correctness is stable.
+  Removed the unused range-policy argument and continuation fallbacks, observer
+  `ok`, and obsolete observer-side email/login plumbing. Rechecked and kept the
+  cleanup job handles because they now drive the wrapper's `finally` cleanup.
 
 - [x] Add a no-mark fast path for plain commits.
   MarkedTextRangePolicy.replacementDecision needlessly calls selectedRange() and
