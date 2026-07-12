@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "observer": "node observer.mjs"
+    "observer": "node observer.mjs",
+    "test": "node --test *.test.mjs"
   },
   "dependencies": {
     "playwright-core": "^1.54.0",

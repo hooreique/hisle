@@ -5,6 +5,8 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
 
+import { installDOMEventRecorder } from './dom_event_recorder.mjs';
+
 const runDir = requiredEnv('RUN_DIR');
 const runId = process.env.RUN_ID ?? path.basename(runDir);
 const observerPort = Number(process.env.OBSERVER_PORT ?? '0');
@@ -347,6 +349,8 @@ async function installTestPage(targetPage) {
 </body>
 </html>`);
 
+  await targetPage.evaluate(installDOMEventRecorder);
+
   await targetPage.evaluate(({
     kind,
     initialText,
@@ -391,9 +395,7 @@ async function installTestPage(targetPage) {
       'blur',
     ];
 
-    window.__hisleEvents = [];
     window.__hisleChaosEvents = [];
-    window.__hisleEventSequence = 0;
 
     target.dataset.placeholder = kind;
     if (initialText) {
@@ -415,10 +417,6 @@ async function installTestPage(targetPage) {
         id: element.id || null,
         name: element.getAttribute('name'),
       };
-    }
-
-    function eventValue(event, key) {
-      return key in event ? event[key] : null;
     }
 
     function targetValue() {
@@ -811,39 +809,26 @@ async function installTestPage(targetPage) {
       idleTimer = setTimeout(idleEditorMaintenance, chaosDelayMilliseconds);
     }
 
-    function record(event) {
-      const eventTimestamp = Number(event.timeStamp ?? performance.now());
-      const wallClockTimestamp = new Date(performance.timeOrigin + eventTimestamp).toISOString();
-      const selection = selectionState();
-
-      window.__hisleEvents.push({
-        sequence: ++window.__hisleEventSequence,
-        performance_now: performance.now(),
-        event_timestamp: eventTimestamp,
-        wall_clock_timestamp: wallClockTimestamp,
-        event_type: event.type,
-        key: eventValue(event, 'key'),
-        code: eventValue(event, 'code'),
-        repeat: eventValue(event, 'repeat'),
-        data: eventValue(event, 'data'),
-        input_type: eventValue(event, 'inputType'),
-        is_composing: eventValue(event, 'isComposing'),
-        value: targetValue(),
-        selection_start: selection.selection_start,
-        selection_end: selection.selection_end,
-        selection_anchor: selection.selection_anchor,
-        selection_focus: selection.selection_focus,
-        active_element: activeElementIdentity(),
-      });
-
-      if (event.type === 'input' || event.type === 'compositionupdate' || event.type === 'compositionend') {
-        scheduleIdleMaintenance();
-      }
-    }
-
-    for (const type of eventTypes) {
-      document.addEventListener(type, record, { capture: true });
-    }
+    const recorder = window.__hisleDOMEventRecorder.create({
+      eventTypes,
+      snapshot() {
+        const selection = selectionState();
+        return {
+          value: targetValue(),
+          selection_start: selection.selection_start,
+          selection_end: selection.selection_end,
+          selection_anchor: selection.selection_anchor,
+          selection_focus: selection.selection_focus,
+        };
+      },
+      afterRecord(event) {
+        if (event.type === 'input' || event.type === 'compositionupdate' || event.type === 'compositionend') {
+          scheduleIdleMaintenance();
+        }
+      },
+    });
+    window.__hisleEvents = recorder.events;
+    recorder.start();
 
     if (initialRender === 'spans') {
       rerenderWysiwygDOM({ force: true });

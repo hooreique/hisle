@@ -5,6 +5,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
 
+import { installDOMEventRecorder } from './dom_event_recorder.mjs';
 import {
   confluencePageIdentity,
   findPageWithConfluenceIdentity,
@@ -484,6 +485,7 @@ async function installConfluenceInstrumentation(targetHandle) {
     element.scrollIntoView({ block: 'center', inline: 'nearest' });
   });
   await page.waitForTimeout(250);
+  await page.evaluate(installDOMEventRecorder);
 
   await page.evaluate(({ target, expected, initialCaretOffset }) => {
     const eventTypes = [
@@ -512,26 +514,6 @@ async function installConfluenceInstrumentation(targetHandle) {
       const range = document.createRange();
       range.selectNodeContents(target);
       return range.toString();
-    }
-
-    function elementIdentity(element) {
-      if (!element) {
-        return null;
-      }
-
-      const isElement = element instanceof Element;
-      return {
-        tagName: isElement ? element.tagName : (element.nodeName ?? null),
-        id: isElement ? (element.id || null) : null,
-        role: isElement ? element.getAttribute('role') : null,
-        aria_label: isElement ? element.getAttribute('aria-label') : null,
-        data_testid: isElement ? element.getAttribute('data-testid') : null,
-        class_name: isElement && typeof element.className === 'string' ? element.className.slice(0, 240) : null,
-      };
-    }
-
-    function eventValue(event, key) {
-      return key in event ? event[key] : null;
     }
 
     function textOffset(container, offset) {
@@ -653,33 +635,6 @@ async function installConfluenceInstrumentation(targetHandle) {
       };
     }
 
-    function record(event) {
-      const state = selectionState();
-      const eventTimestamp = Number(event.timeStamp ?? performance.now());
-      const wallClockTimestamp = new Date(performance.timeOrigin + eventTimestamp).toISOString();
-      window.__hisleAtlassian.events.push({
-        sequence: ++window.__hisleAtlassian.event_sequence,
-        performance_now: performance.now(),
-        event_timestamp: eventTimestamp,
-        wall_clock_timestamp: wallClockTimestamp,
-        event_type: event.type,
-        key: eventValue(event, 'key'),
-        code: eventValue(event, 'code'),
-        repeat: eventValue(event, 'repeat'),
-        data: eventValue(event, 'data'),
-        input_type: eventValue(event, 'inputType'),
-        is_composing: eventValue(event, 'isComposing'),
-        editor_text: targetText(),
-        editor_text_length: targetText().length,
-        selection_start: state.selection_start,
-        selection_end: state.selection_end,
-        selection_anchor: state.selection_anchor,
-        selection_focus: state.selection_focus,
-        active_element: elementIdentity(document.activeElement),
-        event_target: elementIdentity(event.target),
-      });
-    }
-
     if (window.__hisleAtlassian?.remove_listeners) {
       window.__hisleAtlassian.remove_listeners();
     }
@@ -688,7 +643,21 @@ async function installConfluenceInstrumentation(targetHandle) {
     const initialRangeText = targetRangeText();
     const initialCaretOffsetResolved = placeCaret();
     const clickPoint = caretClientPoint();
-    const listeners = [];
+    const recorder = window.__hisleDOMEventRecorder.create({
+      eventTypes,
+      snapshot() {
+        const state = selectionState();
+        const text = targetText();
+        return {
+          editor_text: text,
+          editor_text_length: text.length,
+          selection_start: state.selection_start,
+          selection_end: state.selection_end,
+          selection_anchor: state.selection_anchor,
+          selection_focus: state.selection_focus,
+        };
+      },
+    });
 
     window.__hisleAtlassian = {
       target,
@@ -696,9 +665,8 @@ async function installConfluenceInstrumentation(targetHandle) {
       initial_text: initialText,
       initial_range_text: initialRangeText,
       initial_caret_offset: initialCaretOffsetResolved,
-      events: [],
-      event_sequence: 0,
-      target_descriptor: elementIdentity(target),
+      events: recorder.events,
+      target_descriptor: window.__hisleDOMEventRecorder.elementIdentity(target),
       editor_click_client_point: clickPoint,
       editor_click_screen_point: estimatedScreenPointForClientPoint(clickPoint),
       viewport: {
@@ -710,16 +678,11 @@ async function installConfluenceInstrumentation(targetHandle) {
         screen_y: window.screenY,
       },
       remove_listeners() {
-        for (const [type, listener] of listeners) {
-          document.removeEventListener(type, listener, { capture: true });
-        }
+        recorder.stop();
       },
     };
 
-    for (const type of eventTypes) {
-      document.addEventListener(type, record, { capture: true });
-      listeners.push([type, record]);
-    }
+    recorder.start();
 
     window.__hisleAtlassian.ready = document.activeElement === target || target.contains(document.activeElement);
   }, {

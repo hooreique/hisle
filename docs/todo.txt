@@ -85,7 +85,7 @@ Diagnostic correctness and safety
   Refs: atlassian_observer.mjs:491-503,629-653. Document event targets currently
   cause getAttribute TypeErrors; the latest run had 24 errors and zero records.
 
-- [ ] Add a small in-browser recorder contract test.
+- [x] Add a small in-browser recorder contract test.
   Assert keyboard/composition/input/selectionchange payloads and no page errors;
   node --check and Nu --ide-check are syntax-only.
 

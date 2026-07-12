@@ -50,6 +50,12 @@ Run the deterministic InputMethodKit marked-range policy check:
 nix develop --command -- make marked-range-policy-check
 ```
 
+Run the deterministic browser observer contract checks:
+
+```sh
+nix develop .#browser --command -- make browser-observer-check
+```
+
 Xcode-oriented dev shell check:
 
 ```sh

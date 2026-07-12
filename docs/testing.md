@@ -264,6 +264,23 @@ Triage guide:
   Chrome/macOS/browser interaction.
 - Good DOM events followed by later value mutation points at page JavaScript.
 
+### Browser Recorder Contract
+
+Run the browser observer contract tests after changing the shared DOM event
+recorder or either observer's instrumentation:
+
+```sh
+nix develop .#browser --command -- make browser-observer-check
+```
+
+The target installs the locked browser observer dependencies when they are
+missing. The recorder test launches the installed Chrome in headless mode and
+synthetically dispatches browser-native DOM event objects for keyboard,
+composition, input, and document `selectionchange`. It checks their serialized
+payloads and page errors. Set `CHROME_PATH` to use a non-default Chrome
+executable. The same command also runs the deterministic Confluence
+page-identity tests.
+
 ## Firefox IME Reproduction
 
 Use this as the Firefox counterpart to the local Chrome IME fixture. It launches
