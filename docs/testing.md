@@ -278,9 +278,9 @@ The target installs the locked browser observer dependencies when they are
 missing. The recorder test launches the installed Chrome in headless mode and
 synthetically dispatches browser-native DOM event objects for keyboard,
 composition, input, and document `selectionchange`. It checks their serialized
-payloads and page errors. Set `CHROME_PATH` to use a non-default Chrome
-executable. The same command also runs the deterministic Confluence
-page-identity tests.
+payloads, the mutation-aware bounded caret-context snapshot contract, and page
+errors. Set `CHROME_PATH` to use a non-default Chrome executable. The same
+command also runs the deterministic Confluence page-identity tests.
 
 ## Firefox IME Reproduction
 
@@ -329,7 +329,9 @@ instead of the local Chrome IME fixture. The test uses a separate persistent
 Chrome profile under `local/atlassian/chrome-profile/` so Atlassian cookies and
 site data survive across runs. Artifacts are written under
 `local/atlassian/runs/<run-id>/`. The whole `local/` tree is ignored by Git and
-can contain private session data.
+can contain private session data. The wrapper uses user-only creation
+permissions, normalizes the Atlassian, run, and profile directories to mode
+`0700`, and creates new artifact files with mode `0600`.
 
 Configure the target page with either `ATLASSIAN_CONFLUENCE_URL` or
 `local/atlassian/config.json`:
@@ -435,6 +437,9 @@ Useful environment options:
 - `HISLE_ATLASSIAN_KEEP_OPEN=1`, leave Chrome open after artifact capture.
 - `HISLE_ATLASSIAN_ALLOW_MISMATCH=1`, keep the run successful while preserving
   the observed mismatch in artifacts.
+- `HISLE_ATLASSIAN_TRACE=1`, opt into a Playwright trace. Tracing is off by
+  default because page snapshots can be large and can preserve private page
+  text, URLs, and screenshots.
 - `CHROME_PATH`, optional path to Chrome or Chrome for Testing.
 - `CHROME_REMOTE_DEBUGGING_PORT`, optional fixed Chrome remote debugging port.
 - `HISLE_ATLASSIAN_REUSE_CHROME=1`, connect to an already-open Chrome on
@@ -452,7 +457,9 @@ Artifacts:
 - `dom-events.jsonl`: capture-phase DOM keyboard, composition, input, selection,
   focus, and blur events from the Confluence page, including prototype-backed
   DOM values for `key`, `code`, `data`, `inputType` (`input_type`), and
-  `isComposing` (`is_composing`).
+  `isComposing` (`is_composing`). Each event keeps the editor text length,
+  absolute selection offsets, and at most 32 UTF-16 code units of context on
+  either side of the caret; it does not copy the full editor text.
 - `console.jsonl`: browser console and page-error records.
 - `ime.log`: unified log stream for `hooreique.inputmethod.hisle`.
 - `runtime-identity.log`: post-run unified log snapshot of the running input
@@ -461,7 +468,9 @@ Artifacts:
   metadata, selected input source, profile path, page URL, and timing data.
 - `final-state.json`: final editor text summary, exact expected full text and
   match, diagnostic substring match, and event anomaly counters.
-- `screenshot.png` and `trace.zip`: final page screenshot and Playwright trace.
+- `screenshot.png`: final page screenshot.
+- `trace.zip`: optional Playwright trace, present only when
+  `HISLE_ATLASSIAN_TRACE=1`.
 
 ### Debug Client Range Trace
 

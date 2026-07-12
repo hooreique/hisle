@@ -109,7 +109,7 @@ Diagnostic correctness and safety
 Performance, privacy, and cleanup
 --------------------------------
 
-- [ ] Reduce live recorder cost and private artifact exposure.
+- [x] Reduce live recorder cost and private artifact exposure.
   Refs: atlassian_observer.mjs:510-653,966-1056. Avoid repeated full-document
   traversal/text snapshots per event, record bounded caret context, make live
   trace opt-in, and use private permissions. A 676-character run produced a

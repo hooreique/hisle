@@ -5,7 +5,7 @@ const driver_output = "build/tools/atlassian_confluence_driver"
 const observer_dir = "tools/chrome-ime"
 const observer_source = "tools/chrome-ime/atlassian_observer.mjs"
 const scenario_contract_cli = "tools/chrome-ime/atlassian_scenario_contract_cli.mjs"
-const expected_artifacts = [
+const base_expected_artifacts = [
     "keys.jsonl",
     "dom-events.jsonl",
     "console.jsonl",
@@ -85,16 +85,31 @@ def normalize-url [value: string] {
     }
 }
 
+def ensure-private-directory [directory: string] {
+    mkdir $directory
+    ^/bin/chmod 700 $directory
+}
+
+def protect-private-file [file: string] {
+    if ($file | path exists) {
+        ^/bin/chmod 600 $file
+    }
+}
+
+umask rwx------ | ignore
 cd $root_dir
 
 let local_atlassian_dir = ($env.HISLE_ATLASSIAN_DIR? | default ([$root_dir "local" "atlassian"] | path join))
+ensure-private-directory $local_atlassian_dir
 let config_file = [$local_atlassian_dir "config.json"] | path join
+protect-private-file $config_file
 let config = if ($config_file | path exists) {
     open $config_file
 } else {
     {}
 }
 let info_file = [$root_dir "local" "atlassianinfo"] | path join
+protect-private-file $info_file
 let info_text = if ($info_file | path exists) {
     open --raw $info_file | str trim
 } else {
@@ -154,14 +169,18 @@ let target_selector = ($env.HISLE_ATLASSIAN_TARGET_SELECTOR? | default "")
 let edit_page = ($env.HISLE_ATLASSIAN_EDIT? | default "")
 let window_title_contains = ($env.HISLE_ATLASSIAN_WINDOW_TITLE_CONTAINS? | default "")
 let allow_mismatch = ($env.HISLE_ATLASSIAN_ALLOW_MISMATCH? | default "")
-let trace = ($env.HISLE_ATLASSIAN_TRACE? | default "")
+let trace_enabled = (($env.HISLE_ATLASSIAN_TRACE? | default "") == "1")
+let expected_artifacts = if $trace_enabled {
+    $base_expected_artifacts
+} else {
+    $base_expected_artifacts | where $it != "trace.zip"
+}
 let editor_timeout = ($env.HISLE_ATLASSIAN_EDITOR_TIMEOUT_MS? | default "")
 let initial_caret_offset = ($env.HISLE_ATLASSIAN_INITIAL_CARET_OFFSET? | default "")
 
-mkdir $local_atlassian_dir
-mkdir ([$local_atlassian_dir "runs"] | path join)
-mkdir $run_dir
-mkdir $profile_dir
+ensure-private-directory ([$local_atlassian_dir "runs"] | path join)
+ensure-private-directory $run_dir
+ensure-private-directory $profile_dir
 mkdir ([$root_dir "build" "tools"] | path join)
 
 if $login_only {
@@ -240,7 +259,7 @@ let observer_env = {
     HISLE_ATLASSIAN_EDIT: $edit_page
     HISLE_ATLASSIAN_WINDOW_TITLE_CONTAINS: $window_title_contains
     HISLE_ATLASSIAN_ALLOW_MISMATCH: $allow_mismatch
-    HISLE_ATLASSIAN_TRACE: $trace
+    HISLE_ATLASSIAN_TRACE: (if $trace_enabled { "1" } else { "0" })
     HISLE_ATLASSIAN_EDITOR_TIMEOUT_MS: $editor_timeout
     HISLE_ATLASSIAN_INITIAL_CARET_OFFSET: $initial_caret_offset
 }
@@ -369,7 +388,7 @@ let driver_state = if ($driver_state_file | path exists) {
     edit_page: (if ($edit_page | is-empty) { true } else { $edit_page != "0" })
     allow_mismatch: ($allow_mismatch == "1")
     keep_open: ($keep_open == "1")
-    trace_enabled: ($trace != "0")
+    trace_enabled: $trace_enabled
     window_title_contains: ($ready.window_title_contains? | default null)
     macos_version: $macos_version
     chrome_path: (maybe-null $chrome_path)

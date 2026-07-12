@@ -28,7 +28,7 @@ const expectedText = loginOnly ? '' : requiredEnv('HISLE_ATLASSIAN_EXPECTED_TEXT
 const targetSelector = process.env.HISLE_ATLASSIAN_TARGET_SELECTOR ?? '';
 const editPage = process.env.HISLE_ATLASSIAN_EDIT !== '0';
 const keepOpen = process.env.HISLE_ATLASSIAN_KEEP_OPEN === '1';
-const traceEnabled = process.env.HISLE_ATLASSIAN_TRACE !== '0';
+const traceEnabled = process.env.HISLE_ATLASSIAN_TRACE === '1';
 const allowMismatch = process.env.HISLE_ATLASSIAN_ALLOW_MISMATCH === '1';
 const editorTimeoutMilliseconds = numberFromEnv('HISLE_ATLASSIAN_EDITOR_TIMEOUT_MS', 90000);
 const configuredWindowTitleContains = process.env.HISLE_ATLASSIAN_WINDOW_TITLE_CONTAINS ?? '';
@@ -488,49 +488,10 @@ async function installConfluenceInstrumentation(targetHandle) {
       'blur',
     ];
 
-    function targetText() {
-      return target.innerText ?? target.textContent ?? '';
-    }
-
     function targetRangeText() {
       const range = document.createRange();
       range.selectNodeContents(target);
       return range.toString();
-    }
-
-    function textOffset(container, offset) {
-      if (!container || !target.contains(container)) {
-        return null;
-      }
-
-      const range = document.createRange();
-      range.selectNodeContents(target);
-      try {
-        range.setEnd(container, offset);
-      } catch {
-        return null;
-      }
-      return range.toString().length;
-    }
-
-    function selectionState() {
-      const selection = window.getSelection();
-      if (!selection || selection.rangeCount === 0) {
-        return {
-          selection_start: null,
-          selection_end: null,
-          selection_anchor: null,
-          selection_focus: null,
-        };
-      }
-
-      const range = selection.getRangeAt(0);
-      return {
-        selection_start: textOffset(range.startContainer, range.startOffset),
-        selection_end: textOffset(range.endContainer, range.endOffset),
-        selection_anchor: textOffset(selection.anchorNode, selection.anchorOffset),
-        selection_focus: textOffset(selection.focusNode, selection.focusOffset),
-      };
     }
 
     function textNodeAndOffsetForTextOffset(root, desiredOffset) {
@@ -621,23 +582,17 @@ async function installConfluenceInstrumentation(targetHandle) {
       window.__hisleAtlassian.remove_listeners();
     }
 
-    const initialText = targetText();
+    const initialText = target.innerText ?? target.textContent ?? '';
     const initialRangeText = targetRangeText();
     const initialCaretOffsetResolved = placeCaret();
     const clickPoint = caretClientPoint();
+    const snapshotter = window.__hisleDOMEventRecorder.createTextSelectionSnapshotter(target, {
+      contextRadius: 32,
+    });
     const recorder = window.__hisleDOMEventRecorder.create({
       eventTypes,
       snapshot() {
-        const state = selectionState();
-        const text = targetText();
-        return {
-          editor_text: text,
-          editor_text_length: text.length,
-          selection_start: state.selection_start,
-          selection_end: state.selection_end,
-          selection_anchor: state.selection_anchor,
-          selection_focus: state.selection_focus,
-        };
+        return snapshotter.snapshot();
       },
     });
 
@@ -661,6 +616,7 @@ async function installConfluenceInstrumentation(targetHandle) {
       },
       remove_listeners() {
         recorder.stop();
+        snapshotter.stop();
       },
     };
 
@@ -947,7 +903,12 @@ async function finalize({ reason, driverExitCode }) {
   }
   finalized = true;
 
-  const domEvents = page ? await page.evaluate(() => window.__hisleAtlassian?.events ?? []).catch(() => []) : [];
+  const domEvents = page ? await page.evaluate(() => {
+    const instrumentation = window.__hisleAtlassian;
+    const events = instrumentation?.events ?? [];
+    instrumentation?.remove_listeners?.();
+    return events;
+  }).catch(() => []) : [];
   await writeJSONLines(path.join(runDir, 'dom-events.jsonl'), domEvents);
   await writeJSONLines(path.join(runDir, 'console.jsonl'), consoleRecords);
 
@@ -1085,7 +1046,7 @@ function analyzeEvents(events) {
     }
 
     const selection = event.selection_start;
-    const textLength = Number(event.editor_text_length ?? String(event.editor_text ?? '').length);
+    const textLength = Number(event.editor_text_length ?? 0);
     if (typeof selection === 'number') {
       if (maxSelection != null && textLength >= (previous?.textLength ?? 0) && selection < maxSelection - 2) {
         regressions.push({
