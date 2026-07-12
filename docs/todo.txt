@@ -96,7 +96,7 @@ Diagnostic correctness and safety
   N-word scenarios that expect one word, and Roman default drift. Exact document
   delta/full-text matching should be the default.
 
-- [ ] Select the exact configured Confluence page, not any same-host tab.
+- [x] Select the exact configured Confluence page, not any same-host tab.
   Ref: atlassian_observer.mjs:237-268. Require normalized URL/path identity or a
   dedicated page handle before Edit/HID actions can autosave a draft.
 

@@ -318,7 +318,7 @@ Configure the target page with either `ATLASSIAN_CONFLUENCE_URL` or
 
 ```json
 {
-  "page_url": "https://<site>.atlassian.net/wiki/spaces/<space>/pages/<page>/<title>",
+  "page_url": "https://<site>.atlassian.net/wiki/spaces/<space>/pages/<numeric-page-id>/<title>",
   "email": "<optional login email>"
 }
 ```
@@ -326,6 +326,20 @@ Configure the target page with either `ATLASSIAN_CONFLUENCE_URL` or
 The older `local/atlassianinfo` form, `<site> <email>`, is still accepted as a
 fallback for opening the site, but use `page_url` for the live-page repro so the
 observer can navigate directly to the test page.
+
+The observer reuses a browser tab only when its origin and numeric Confluence
+page ID match `page_url`; live edit runs require that numeric ID. The ID remains
+authoritative when a title slug or edit URL differs. If no matching tab
+appears, the observer opens a dedicated tab at `page_url`, and it refuses to
+click Edit or mark the driver ready for HID input if the resulting page
+identity cannot be verified.
+
+Run the deterministic identity check after changing this selection policy:
+
+```sh
+nix develop .#browser --command -- \
+  node --test tools/chrome-ime/atlassian_page_identity.test.mjs
+```
 
 First create or refresh the browser login session:
 

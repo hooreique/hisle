@@ -5,6 +5,12 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
 
+import {
+  confluencePageIdentity,
+  findPageWithConfluenceIdentity,
+  hasSameConfluencePageIdentity,
+} from './atlassian_page_identity.mjs';
+
 const runDir = requiredEnv('RUN_DIR');
 const profileDir = requiredEnv('ATLASSIAN_PROFILE_DIR');
 const requestedPageURL = requiredEnv('ATLASSIAN_CONFLUENCE_URL');
@@ -44,6 +50,9 @@ await fs.mkdir(profileDir, { recursive: true });
 await fs.writeFile(pidFile, `${process.pid}\n`, 'utf8');
 
 try {
+  if (!loginOnly) {
+    requiredRequestedPageIdentity();
+  }
   await startBrowser();
   await startServer();
 
@@ -235,37 +244,25 @@ async function waitForCDP(cdpURL) {
 }
 
 async function pageForRequestedURL(targetContext) {
-  const requested = new URL(requestedPageURL);
   const deadline = Date.now() + 30000;
-  let fallback = null;
 
   while (Date.now() < deadline) {
-    for (const candidate of targetContext.pages()) {
+    const candidates = targetContext.pages();
+    for (const candidate of candidates) {
       wirePage(candidate);
-      const url = candidate.url();
-      if (url === 'about:blank' || url.startsWith('chrome://')) {
-        fallback = fallback ?? candidate;
-        continue;
-      }
+    }
 
-      fallback = candidate;
-      try {
-        const parsed = new URL(url);
-        if (parsed.hostname === requested.hostname) {
-          return candidate;
-        }
-      } catch {
-        // Keep waiting for a usable page URL.
-      }
+    const matchingPage = findPageWithConfluenceIdentity(candidates, requestedPageURL);
+    if (matchingPage) {
+      return matchingPage;
     }
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
 
-  const selected = fallback ?? await targetContext.newPage();
-  if (selected.url() === 'about:blank' || selected.url().startsWith('chrome://')) {
-    await selected.goto(requestedPageURL, { waitUntil: 'domcontentloaded', timeout: 120000 });
-  }
-  return selected;
+  const dedicatedPage = await targetContext.newPage();
+  wirePage(dedicatedPage);
+  await dedicatedPage.goto(requestedPageURL, { waitUntil: 'domcontentloaded', timeout: 120000 });
+  return dedicatedPage;
 }
 
 function wirePage(targetPage) {
@@ -293,6 +290,31 @@ function wirePage(targetPage) {
   });
 }
 
+function requiredRequestedPageIdentity() {
+  const requestedIdentity = confluencePageIdentity(requestedPageURL);
+  if (!requestedIdentity?.pageId) {
+    throw new Error(
+      'ATLASSIAN_CONFLUENCE_URL must identify a Confluence page with a numeric page ID.'
+    );
+  }
+  return requestedIdentity;
+}
+
+function requireConfiguredPageIdentity(stage) {
+  const requestedIdentity = requiredRequestedPageIdentity();
+  const currentPageURL = page.url();
+  const currentIdentity = confluencePageIdentity(currentPageURL);
+  if (!hasSameConfluencePageIdentity(currentPageURL, requestedPageURL)) {
+    const currentSummary = currentIdentity?.pageId
+      ? `${currentIdentity.origin} page ${currentIdentity.pageId}`
+      : 'an unrecognized page URL';
+    throw new Error(
+      `Refusing to ${stage} because the current page is ${currentSummary}, ` +
+      `not ${requestedIdentity.origin} page ${requestedIdentity.pageId}.`
+    );
+  }
+}
+
 async function prepareConfluenceEditor() {
   const login = await loginState();
   if (login.maybe_login) {
@@ -302,6 +324,8 @@ async function prepareConfluenceEditor() {
       'complete the email verification in Chrome, then rerun the repro.'
     );
   }
+
+  requireConfiguredPageIdentity('find or open an editor');
 
   let target = await findEditorTarget({ timeoutMilliseconds: 2500 });
   if (!target && editPage) {
@@ -317,6 +341,7 @@ async function prepareConfluenceEditor() {
     );
   }
 
+  requireConfiguredPageIdentity('instrument an editor for HID input');
   await installConfluenceInstrumentation(target);
 }
 
@@ -357,6 +382,7 @@ async function clickEditButton() {
     return false;
   }
 
+  requireConfiguredPageIdentity('click Edit');
   await editButton.click({ timeout: 10000 });
   await page.waitForLoadState('domcontentloaded', { timeout: 30000 }).catch(() => {});
   await page.waitForTimeout(2500);
@@ -709,7 +735,14 @@ async function installConfluenceInstrumentation(targetHandle) {
 async function startServer() {
   server = http.createServer((request, response) => {
     if (request.method === 'GET' && request.url === '/ready') {
-      writeJSON(response, 200, { ok: true, runId, runDir });
+      try {
+        if (!loginOnly) {
+          requireConfiguredPageIdentity('confirm readiness for the HID driver');
+        }
+        writeJSON(response, 200, { ok: true, runId, runDir });
+      } catch (error) {
+        writeJSON(response, 409, { ok: false, error: String(error?.stack ?? error) });
+      }
       return;
     }
 
@@ -766,6 +799,7 @@ async function placeConfiguredCaret() {
     throw new Error('Cannot place caret before page is ready.');
   }
 
+  requireConfiguredPageIdentity('place the editor caret for HID input');
   return page.evaluate(({ requestedOffset }) => {
     const state = window.__hisleAtlassian;
     const target = state?.target ?? null;
@@ -883,6 +917,10 @@ async function placeConfiguredCaret() {
 }
 
 async function writeReadyFile() {
+  if (page && !loginOnly) {
+    requireConfiguredPageIdentity('mark the observer ready for HID input');
+  }
+
   const activeBrowser = browser ?? context.browser();
   const login = page ? await loginState().catch(() => null) : null;
   const editorState = page ? await page.evaluate(() => {
