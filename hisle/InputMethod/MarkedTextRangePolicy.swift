@@ -23,7 +23,7 @@ struct PendingMarkedTextReplacement {
 
 enum MarkedTextRangePolicy {
     static let policyID = "current-selection-nsnotfound+split-boundary+" +
-        "deferred-boundary+conditional-postcommit-caret"
+        "deferred-boundary+strict-selection-consistency+conditional-postcommit-caret"
 
     static var currentSelectionReplacementRange: NSRange {
         NSRange(location: NSNotFound, length: 0)
@@ -94,17 +94,17 @@ enum MarkedTextRangePolicy {
     }
 
     static func isSelectionRange(_ selectedRange: NSRange, consistentWithMarkedRange markedRange: NSRange) -> Bool {
-        if selectedRange.location == markedRange.location {
-            return true
-        }
-
         guard let selectedEnd = upperBound(of: selectedRange),
               let markedEnd = upperBound(of: markedRange)
         else {
             return false
         }
 
-        if selectedEnd == markedEnd {
+        if selectedRange.length > 0 {
+            return selectedRange.location == markedRange.location && selectedEnd == markedEnd
+        }
+
+        if selectedRange.location == markedRange.location || selectedRange.location == markedEnd {
             return true
         }
 
@@ -113,7 +113,10 @@ enum MarkedTextRangePolicy {
     }
 
     private static func upperBound(of range: NSRange) -> Int? {
-        guard range.location != NSNotFound else {
+        guard range.location != NSNotFound,
+              range.location >= 0,
+              range.length >= 0
+        else {
             return nil
         }
 

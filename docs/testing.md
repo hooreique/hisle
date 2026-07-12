@@ -2,6 +2,20 @@
 
 This document keeps long-lived verification procedures for `hisle`.
 
+## IMK Range Policy Check
+
+Run the deterministic marked-range policy table before GUI or browser
+regressions when changing selection consistency or post-commit caret tracking:
+
+```sh
+nix develop --command -- make marked-range-policy-check
+```
+
+The check compiles the production `MarkedTextRangePolicy` with a focused Swift
+runner. It verifies exact non-collapsed range equality, the supported collapsed
+caret positions, stale selections that share only one boundary, invalid ranges,
+and integer overflow.
+
 ## GUI Smoke Test
 
 Run this as a separate GUI check because InputMethodKit modifier-event delivery

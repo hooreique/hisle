@@ -140,7 +140,11 @@ the wrong document position in the middle of rich editor content. When the
 pre-commit host selection is already consistent with the owned replacement
 range, derive continuation from that replacement range plus the committed text
 length, because fast browser input can expose a transient post-commit
-`selectedRange()` that is ahead of the intended caret.
+`selectedRange()` that is ahead of the intended caret. A non-collapsed
+pre-commit selection is consistent only when both its start and end match the
+owned replacement range; sharing just one boundary can be stale host state. A
+collapsed selection remains compatible at the replacement start, end, or one
+UTF-16 position after the end.
 
 For a whitespace `FlushThenEmit` boundary that closes active Hangul marked text,
 commit the active composition and the whitespace as separate host insertions.

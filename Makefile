@@ -18,7 +18,7 @@ SWIFTLINT ?= swiftlint
 XCODEBUILD_ENV := env -u CC -u CXX -u LD -u SDKROOT -u NIX_CC -u NIX_CFLAGS_COMPILE -u NIX_CFLAGS_LINK -u NIX_LDFLAGS
 XCODEBUILD := $(XCODEBUILD_ENV) /usr/bin/xcodebuild
 
-.PHONY: all help require-nix-shell require-app-shell require-default-shell require-core-shell require-browser-shell require-icon-shell build dmg install-debug uninstall clean icons check-toolchain version-check swiftlint core-spec-check gui-smoke-test chrome-ime-repro firefox-ime-repro atlassian-confluence-login atlassian-confluence-repro
+.PHONY: all help require-nix-shell require-app-shell require-default-shell require-core-shell require-browser-shell require-icon-shell build dmg install-debug uninstall clean icons check-toolchain version-check swiftlint marked-range-policy-check core-spec-check gui-smoke-test chrome-ime-repro firefox-ime-repro atlassian-confluence-login atlassian-confluence-repro
 
 all: help
 
@@ -32,6 +32,7 @@ help:
 	@echo '    nix develop --command -- make check-toolchain'
 	@echo '    nix develop --command -- make version-check'
 	@echo '    nix develop --command -- make swiftlint'
+	@echo '    nix develop --command -- make marked-range-policy-check'
 	@echo '    nix develop --command -- make gui-smoke-test'
 	@echo '    nix develop .#core --command -- make core-spec-check'
 	@echo '    nix develop .#browser --command -- make chrome-ime-repro'
@@ -106,6 +107,9 @@ version-check: require-default-shell
 
 swiftlint: require-app-shell
 	$(SWIFTLINT) lint
+
+marked-range-policy-check: require-default-shell
+	$(NU) tools/marked_text_range_policy_check.nu
 
 build: require-app-shell
 	$(XCODEBUILD) \

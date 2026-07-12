@@ -70,7 +70,7 @@ Product correctness
   Cover multi-scalar fallback, repeated whitespace, zero-delay next input,
   Backspace/navigation, mode/focus/client changes, and deactivation.
 
-- [ ] Narrow the post-commit selection consistency predicate and table-test it.
+- [x] Narrow the post-commit selection consistency predicate and table-test it.
   Refs: MarkedTextRangePolicy.swift:96-113,247-260. Sharing only one boundary
   must not make an expanded stale selection trustworthy.
 
