@@ -1,0 +1,145 @@
+hisle Confluence / IMK Follow-up TODO
+=====================================
+
+Status and temporary rules
+--------------------------
+
+- [x] is completed; [ ] is unresolved. Mark a task complete only after its
+  implementation and relevant verification pass.
+- This is a handoff document, not permission to start every task. Select and
+  scope one checkbox before changing code.
+- While this file exists, avoid broad documentation edits. Make only the
+  minimum owning-doc update required by AGENTS.md for behavior or command
+  changes. Defer the consolidated documentation pass until code work is done.
+- Keep product fixes, observer repairs, and cleanup separate unless they depend
+  on one another.
+- Use a fresh RUN_ID for every browser run. Live Confluence tests can autosave;
+  use only the configured disposable page.
+- Keep artifacts in build/ or local/. They may contain private text, URLs,
+  screenshots, traces, cookies, and paths; never commit them.
+- When all tasks are complete, run the final checklist, update owning docs and
+  bug records, then remove this file.
+
+Context for a new session
+-------------------------
+
+Reviewed commits: 2b5993b..9167d4f (2026-07-05 to 2026-07-06). They added
+owned IMK ranges, Roman current-selection handling, Firefox prefix fixes, and
+split/deferred whitespace for the Confluence Space/Backspace bug.
+
+Reviewed runtime: hisle 0.1.14-debug build 26, hisle-core 0.1.1. Policy ID:
+current-selection-nsnotfound+split-boundary+deferred-boundary+
+conditional-postcommit-caret.
+
+Read these before implementation:
+
+- docs/macos-imk.md: "Marked Text Range Policy"
+- docs/testing.md: browser fixtures and Atlassian Confluence live repro
+- bugfix/confluence-cursor-jump/report.md
+- bugfix/confluence-space-backspace/notes.md
+- bugfix/firefox-prefix-textarea/notes.md
+- hisle/InputMethod/InputController+Composition.swift
+- hisle/InputMethod/InputController+KeyHandling.swift
+- hisle/InputMethod/MarkedTextRangePolicy.swift
+- tools/atlassian_confluence_{driver.swift,repro.nu}
+- tools/chrome-ime/{atlassian_observer.mjs,observer.mjs}
+
+Exact live regression: insert "foo bar", move after "foo", type "안녕 ", then
+Backspace; strict final text must be "foo안녕 bar". Latest local artifact:
+local/atlassian/runs/confluence-foo-bar-space-backspace-recheck-20260712-155604/.
+Its strict full-text assertion passed, but event diagnostics are unreliable
+until the observer tasks below are fixed.
+
+Completed baseline
+------------------
+
+- [x] Reviewed the seven related commits and current implementation/tooling.
+- [x] SwiftLint before and after review: 29 files, 0 violations.
+- [x] node --check and Nushell --ide-check passed for observer/wrapper files.
+- [x] Strict live foo-bar-annyeong-space-backspace run passed both exact-match
+  fields.
+- [x] Review made no source changes.
+
+Product correctness
+-------------------
+
+- [ ] Make deferred whitespace state-safe and add deterministic tests.
+  Refs: InputController+Composition.swift:38-41,118-145;
+  InputController+KeyHandling.swift:119-130. The queued callback can mutate or
+  clear a newer composition, target a stale client, or drop handled whitespace.
+  Cover multi-scalar fallback, repeated whitespace, zero-delay next input,
+  Backspace/navigation, mode/focus/client changes, and deactivation.
+
+- [ ] Narrow the post-commit selection consistency predicate and table-test it.
+  Refs: MarkedTextRangePolicy.swift:96-113,247-260. Sharing only one boundary
+  must not make an expanded stale selection trustworthy.
+
+Diagnostic correctness and safety
+---------------------------------
+
+- [ ] Fix event field serialization in both observers.
+  Refs: observer.mjs:420-422; atlassian_observer.mjs:506-508. Prototype-backed
+  key/code/data/inputType/isComposing fields are currently always null.
+
+- [ ] Fix Confluence selectionchange capture.
+  Refs: atlassian_observer.mjs:491-503,629-653. Document event targets currently
+  cause getAttribute TypeErrors; the latest run had 24 errors and zero records.
+
+- [ ] Add a small in-browser recorder contract test.
+  Assert keyboard/composition/input/selectionchange payloads and no page errors;
+  node --check and Nu --ide-check are syntax-only.
+
+- [ ] Centralize exact expected output for every Confluence scenario.
+  Refs: atlassian_confluence_repro.nu:77-82;
+  atlassian_confluence_driver.swift:26-42,394-423;
+  atlassian_observer.mjs:100-108,970-1041. Fix trailing-space false passes,
+  N-word scenarios that expect one word, and Roman default drift. Exact document
+  delta/full-text matching should be the default.
+
+- [ ] Select the exact configured Confluence page, not any same-host tab.
+  Ref: atlassian_observer.mjs:237-268. Require normalized URL/path identity or a
+  dedicated page handle before Edit/HID actions can autosave a draft.
+
+- [ ] Guarantee cleanup on every observer/wrapper exit and RUN_ID collision.
+  Refs: observer.mjs:64-81,138-210,1232-1242;
+  atlassian_observer.mjs:46-65,166-214; both Nushell job sections. Use
+  idempotent finally/defer cleanup for Node, Chrome, Firefox/geckodriver, ports,
+  and profile locks; reject or safely initialize an existing run directory.
+
+Performance, privacy, and cleanup
+--------------------------------
+
+- [ ] Reduce live recorder cost and private artifact exposure.
+  Refs: atlassian_observer.mjs:510-653,966-1056. Avoid repeated full-document
+  traversal/text snapshots per event, record bounded caret context, make live
+  trace opt-in, and use private permissions. A 676-character run produced a
+  205 KB DOM log and 4.7 MB trace.
+
+- [ ] Remove confirmed dead code after correctness is stable.
+  Recheck then remove: unused ownedInsertionRange; unreachable
+  continuationReplacement/markedContinuation and startLocationForCommit marked
+  fallback; unused observer `ok`; obsolete email/login plumbing; unused cleanup
+  job handles.
+
+- [ ] Add a no-mark fast path for plain commits.
+  MarkedTextRangePolicy.replacementDecision needlessly calls selectedRange() and
+  markedRange() for Roman/plain punctuation input. This predates the reviewed
+  chain, so treat it as cleanup, not a demonstrated recent regression.
+
+Final integration checklist
+---------------------------
+
+- [ ] nix develop --command -- make swiftlint
+- [ ] nix develop --command -- make gui-smoke-test
+- [ ] If hisle-core changes: nix develop .#core --command -- make core-spec-check
+- [ ] node --check and Nu --ide-check for each changed observer/wrapper
+- [ ] Targeted Chrome and Firefox regressions, including Firefox
+  annyeong-word-repeats from bugfix/firefox-prefix-textarea/notes.md
+- [ ] Live strict Confluence run with a fresh RUN_ID:
+  HISLE_ATLASSIAN_SCENARIO=foo-bar-annyeong-space-backspace
+  HISLE_ATLASSIAN_INITIAL_CARET_OFFSET=middle
+  nix develop .#browser --command -- make atlassian-confluence-repro
+- [ ] Confirm exact final state, non-null event payloads, selectionchange capture,
+  no observer page errors, correct runtime identity, and complete artifacts.
+- [ ] Perform the deferred docs/bugfix-record pass and reconcile runtime versions.
+- [ ] Remove docs/todo.txt.
