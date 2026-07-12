@@ -493,13 +493,14 @@ async function installConfluenceInstrumentation(targetHandle) {
         return null;
       }
 
+      const isElement = element instanceof Element;
       return {
-        tagName: element.tagName,
-        id: element.id || null,
-        role: element.getAttribute('role'),
-        aria_label: element.getAttribute('aria-label'),
-        data_testid: element.getAttribute('data-testid'),
-        class_name: typeof element.className === 'string' ? element.className.slice(0, 240) : null,
+        tagName: isElement ? element.tagName : (element.nodeName ?? null),
+        id: isElement ? (element.id || null) : null,
+        role: isElement ? element.getAttribute('role') : null,
+        aria_label: isElement ? element.getAttribute('aria-label') : null,
+        data_testid: isElement ? element.getAttribute('data-testid') : null,
+        class_name: isElement && typeof element.className === 'string' ? element.className.slice(0, 240) : null,
       };
     }
 

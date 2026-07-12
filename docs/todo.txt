@@ -81,7 +81,7 @@ Diagnostic correctness and safety
   Refs: observer.mjs:420-422; atlassian_observer.mjs:506-508. Prototype-backed
   key/code/data/inputType/isComposing fields are currently always null.
 
-- [ ] Fix Confluence selectionchange capture.
+- [x] Fix Confluence selectionchange capture.
   Refs: atlassian_observer.mjs:491-503,629-653. Document event targets currently
   cause getAttribute TypeErrors; the latest run had 24 errors and zero records.
 
