@@ -12,9 +12,6 @@ let
   installedAppName = "hisle.app";
 in
 {
-  # Workaround for warning: Using 'builtins.derivation' to create a derivation named 'options.json' that references the store path...
-  _file = "github:hooreique/hisle";
-
   options.programs.hisle = {
     enable = lib.mkEnableOption "hisle Korean input method";
 
