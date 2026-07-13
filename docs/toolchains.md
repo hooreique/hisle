@@ -44,6 +44,24 @@ nix develop --command -- make swiftlint
 SwiftLint uses `.swiftlint.yml` and excludes generated SwiftPM build output
 under `hisle-core/.build`.
 
+Run the deterministic InputMethodKit marked-range policy check:
+
+```sh
+nix develop --command -- make marked-range-policy-check
+```
+
+Run the deterministic deferred-whitespace queue and lifecycle check:
+
+```sh
+nix develop --command -- make deferred-boundary-check
+```
+
+Run the deterministic browser recorder, lifecycle, and wrapper-support checks:
+
+```sh
+nix develop .#browser --command -- make browser-observer-check
+```
+
 Xcode-oriented dev shell check:
 
 ```sh

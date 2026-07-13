@@ -1,10 +1,14 @@
+use browser_repro_support.nu [cleanup-observer-job create-fresh-run-directory]
+
 const root_dir = path self ..
 const support_source = "tools/GuiTestSupport.swift"
 const driver_source = "tools/atlassian_confluence_driver.swift"
 const driver_output = "build/tools/atlassian_confluence_driver"
 const observer_dir = "tools/chrome-ime"
 const observer_source = "tools/chrome-ime/atlassian_observer.mjs"
-const expected_artifacts = [
+const observer_supervisor = "tools/chrome-ime/observer_supervisor.mjs"
+const scenario_contract_cli = "tools/chrome-ime/atlassian_scenario_contract_cli.mjs"
+const base_expected_artifacts = [
     "keys.jsonl",
     "dom-events.jsonl",
     "console.jsonl",
@@ -74,14 +78,6 @@ def first-non-empty [values: list] {
     ""
 }
 
-def default-expected-text [scenario: string] {
-    match $scenario {
-        "annyeong-space-backspace" => "안녕",
-        "foo-bar-annyeong-space-backspace" => "foo안녕 bar",
-        _ => "안녕하세요",
-    }
-}
-
 def normalize-url [value: string] {
     if ($value | is-empty) {
         ""
@@ -92,16 +88,31 @@ def normalize-url [value: string] {
     }
 }
 
+def ensure-private-directory [directory: string] {
+    mkdir $directory
+    ^/bin/chmod 700 $directory
+}
+
+def protect-private-file [file: string] {
+    if ($file | path exists) {
+        ^/bin/chmod 600 $file
+    }
+}
+
+umask rwx------ | ignore
 cd $root_dir
 
 let local_atlassian_dir = ($env.HISLE_ATLASSIAN_DIR? | default ([$root_dir "local" "atlassian"] | path join))
+ensure-private-directory $local_atlassian_dir
 let config_file = [$local_atlassian_dir "config.json"] | path join
+protect-private-file $config_file
 let config = if ($config_file | path exists) {
     open $config_file
 } else {
     {}
 }
 let info_file = [$root_dir "local" "atlassianinfo"] | path join
+protect-private-file $info_file
 let info_text = if ($info_file | path exists) {
     open --raw $info_file | str trim
 } else {
@@ -113,7 +124,6 @@ let info_parts = if ($info_text | is-empty) {
     $info_text | split row --regex '\s+'
 }
 let info_site_raw = if (($info_parts | length) > 0) { $info_parts | get 0 } else { "" }
-let info_email = if (($info_parts | length) > 1) { $info_parts | get 1 } else { "" }
 let info_site = normalize-url $info_site_raw
 let config_base_url = normalize-url ($config.base_url? | default "")
 let page_url = first-non-empty [
@@ -122,11 +132,6 @@ let page_url = first-non-empty [
     ($config.page_url? | default ""),
     $config_base_url,
     $info_site,
-]
-let email = first-non-empty [
-    ($env.ATLASSIAN_EMAIL? | default ""),
-    ($config.email? | default ""),
-    $info_email,
 ]
 
 if ($page_url | is-empty) {
@@ -148,6 +153,7 @@ let run_dir = [$local_atlassian_dir "runs" $run_id] | path join
 let profile_dir = ($env.HISLE_ATLASSIAN_PROFILE_DIR? | default ([$local_atlassian_dir "chrome-profile"] | path join))
 let ready_file = [$run_dir "observer-ready.json"] | path join
 let observer_process_file = [$run_dir "observer-process.json"] | path join
+let observer_pid_file = [$run_dir "observer.pid"] | path join
 let observer_stdout_file = [$run_dir "observer.stdout.log"] | path join
 let observer_stderr_file = [$run_dir "observer.stderr.log"] | path join
 let driver_stdout_file = [$run_dir "driver.stdout.log"] | path join
@@ -157,23 +163,22 @@ let remote_debugging_port = ($env.CHROME_REMOTE_DEBUGGING_PORT? | default (rando
 let chrome_path = ($env.CHROME_PATH? | default "")
 let chrome_app = ($env.HISLE_ATLASSIAN_CHROME_APP? | default "Google Chrome")
 let keep_open = ($env.HISLE_ATLASSIAN_KEEP_OPEN? | default "")
-let scenario = ($env.HISLE_ATLASSIAN_SCENARIO? | default "annyeonghaseyo")
-let default_expected_text = default-expected-text $scenario
-let expected_text = ($env.HISLE_ATLASSIAN_EXPECTED_TEXT? | default $default_expected_text)
-let word_count = ($env.HISLE_ATLASSIAN_WORD_COUNT? | default "")
-let roman_text = ($env.HISLE_ATLASSIAN_ROMAN_TEXT? | default "")
 let target_selector = ($env.HISLE_ATLASSIAN_TARGET_SELECTOR? | default "")
 let edit_page = ($env.HISLE_ATLASSIAN_EDIT? | default "")
 let window_title_contains = ($env.HISLE_ATLASSIAN_WINDOW_TITLE_CONTAINS? | default "")
 let allow_mismatch = ($env.HISLE_ATLASSIAN_ALLOW_MISMATCH? | default "")
-let trace = ($env.HISLE_ATLASSIAN_TRACE? | default "")
+let trace_enabled = (($env.HISLE_ATLASSIAN_TRACE? | default "") == "1")
+let expected_artifacts = if $trace_enabled {
+    $base_expected_artifacts
+} else {
+    $base_expected_artifacts | where $it != "trace.zip"
+}
 let editor_timeout = ($env.HISLE_ATLASSIAN_EDITOR_TIMEOUT_MS? | default "")
 let initial_caret_offset = ($env.HISLE_ATLASSIAN_INITIAL_CARET_OFFSET? | default "")
 
-mkdir $local_atlassian_dir
-mkdir ([$local_atlassian_dir "runs"] | path join)
-mkdir $run_dir
-mkdir $profile_dir
+ensure-private-directory ([$local_atlassian_dir "runs"] | path join)
+create-fresh-run-directory $run_dir
+ensure-private-directory $profile_dir
 mkdir ([$root_dir "build" "tools"] | path join)
 
 if $login_only {
@@ -206,6 +211,24 @@ if $login_only {
     exit 0
 }
 
+let scenario_arguments = [
+    "--scenario", ($env.HISLE_ATLASSIAN_SCENARIO? | default ""),
+    "--word-count", ($env.HISLE_ATLASSIAN_WORD_COUNT? | default ""),
+    "--roman-text", ($env.HISLE_ATLASSIAN_ROMAN_TEXT? | default ""),
+    "--expected-text", ($env.HISLE_ATLASSIAN_EXPECTED_TEXT? | default ""),
+]
+let scenario_result = do { ^node $scenario_contract_cli ...$scenario_arguments } | complete
+if $scenario_result.exit_code != 0 {
+    error make {
+        msg: $"Invalid Atlassian Confluence scenario: ($scenario_result.stderr | str trim)"
+    }
+}
+let scenario_contract = $scenario_result.stdout | from json
+let scenario = $scenario_contract.scenario
+let expected_text = $scenario_contract.expected_text
+let word_count = $scenario_contract.word_count | into string
+let roman_text = $scenario_contract.roman_text | default ""
+
 if not (([$root_dir $observer_dir "node_modules" "playwright-core" "package.json"] | path join) | path exists) {
     print "Installing Atlassian Confluence observer Node dependencies..."
     if (([$root_dir $observer_dir "package-lock.json"] | path join) | path exists) {
@@ -219,6 +242,7 @@ let observer_env = {
     RUN_DIR: $run_dir
     RUN_ID: $run_id
     OBSERVER_PORT: $observer_port
+    HISLE_WRAPPER_PID: ($nu.pid | into string)
     CHROME_REMOTE_DEBUGGING_PORT: $remote_debugging_port
     CHROME_PATH: $chrome_path
     HISLE_ATLASSIAN_CHROME_APP: $chrome_app
@@ -226,17 +250,13 @@ let observer_env = {
     HISLE_ATLASSIAN_REUSE_CHROME: ($env.HISLE_ATLASSIAN_REUSE_CHROME? | default "")
     ATLASSIAN_PROFILE_DIR: $profile_dir
     ATLASSIAN_CONFLUENCE_URL: $page_url
-    ATLASSIAN_EMAIL: $email
-    HISLE_ATLASSIAN_LOGIN_ONLY: (if $login_only { "1" } else { "" })
     HISLE_ATLASSIAN_KEEP_OPEN: $keep_open
-        HISLE_ATLASSIAN_EXPECTED_TEXT: $expected_text
-        HISLE_ATLASSIAN_SCENARIO: $scenario
-        HISLE_ATLASSIAN_WORD_COUNT: $word_count
-        HISLE_ATLASSIAN_TARGET_SELECTOR: $target_selector
+    HISLE_ATLASSIAN_EXPECTED_TEXT: $expected_text
+    HISLE_ATLASSIAN_TARGET_SELECTOR: $target_selector
     HISLE_ATLASSIAN_EDIT: $edit_page
     HISLE_ATLASSIAN_WINDOW_TITLE_CONTAINS: $window_title_contains
     HISLE_ATLASSIAN_ALLOW_MISMATCH: $allow_mismatch
-    HISLE_ATLASSIAN_TRACE: $trace
+    HISLE_ATLASSIAN_TRACE: (if $trace_enabled { "1" } else { "0" })
     HISLE_ATLASSIAN_EDITOR_TIMEOUT_MS: $editor_timeout
     HISLE_ATLASSIAN_INITIAL_CARET_OFFSET: $initial_caret_offset
 }
@@ -270,7 +290,7 @@ print $"Writing Atlassian Confluence artifacts to ($run_dir)"
 let observer_job = job spawn --description "hisle atlassian confluence observer" {
     let result = do {
         with-env $observer_env {
-            ^node $observer_source
+            ^node $observer_supervisor $observer_source
         }
     } | complete
 
@@ -279,6 +299,7 @@ let observer_job = job spawn --description "hisle atlassian confluence observer"
     { exit_code: $result.exit_code } | to json | save --force $observer_process_file
 }
 
+try {
 wait-for-file $ready_file $observer_process_file "Atlassian Confluence observer readiness"
 let ready = open $ready_file
 let ready_url = $"http://127.0.0.1:($ready.observer_port)/ready"
@@ -365,13 +386,12 @@ let driver_state = if ($driver_state_file | path exists) {
     edit_page: (if ($edit_page | is-empty) { true } else { $edit_page != "0" })
     allow_mismatch: ($allow_mismatch == "1")
     keep_open: ($keep_open == "1")
-    trace_enabled: ($trace != "0")
+    trace_enabled: $trace_enabled
     window_title_contains: ($ready.window_title_contains? | default null)
     macos_version: $macos_version
     chrome_path: (maybe-null $chrome_path)
     chrome_version: (if not ($ready.chrome_version? | default "" | is-empty) { $ready.chrome_version } else { maybe-null $chrome_version })
     hisle_cli_version: (maybe-null $hisle_cli_version)
-    atlassian_email_configured: (not ($email | is-empty))
     active_input_source_before_selection: ($driver_state.active_input_source_before_selection? | default null)
     selected_input_source_id: "hooreique.inputmethod.hisle.main"
     observer_readiness_time: ($ready.ready_wall_clock_timestamp? | default null)
@@ -396,3 +416,6 @@ if $observer_result.exit_code != 0 {
 }
 
 print $"Atlassian Confluence repro passed. Artifacts: ($run_dir)"
+} finally {
+    cleanup-observer-job $observer_job $observer_pid_file
+}

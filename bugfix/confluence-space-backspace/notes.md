@@ -63,7 +63,7 @@ replacementPolicy=current-selection-nsnotfound+split-boundary+deferred-boundary+
 Runtime identity from the installed debug build:
 
 ```text
-hisle 0.1.13-debug, build 26
+hisle 0.1.14-debug, build 26
 replacementPolicy=current-selection-nsnotfound+split-boundary+deferred-boundary+conditional-postcommit-caret
 bundle=/Users/kia2964158/Library/Input Methods/hisle.app
 ```
@@ -100,4 +100,58 @@ nix develop .#browser --command -- nu --ide-check 0 tools/atlassian_confluence_r
 nix develop --command -- make version-check
 env HISLE_FIREFOX_SCENARIO='annyeong-word-repeats' HISLE_FIREFOX_TARGET='textarea' HISLE_FIREFOX_INITIAL_TEXT='foo bar' HISLE_FIREFOX_INITIAL_CARET='0' HISLE_FIREFOX_SKIP_FOCUS_CLICK=1 EXPECTED_VALUE='안녕 안녕 안녕 안녕foo bar' RUN_ID='firefox-annyeong-repeats-after-deferred-boundary-fix-20260706' nix develop .#browser --command -- nu tools/firefox_ime_repro.nu
 nix develop --command -- make gui-smoke-test
+```
+
+## Deferred Boundary State-Safety Follow-up
+
+The first deferred implementation captured an IMK client in an untracked main
+queue callback. A later input or lifecycle transition could run first, after
+which the callback could clear newer marked state, advance a newer owned range,
+or outlive the session that accepted the whitespace. Multi-scalar fallback text
+could also overtake the deferred boundary in the original call stack.
+
+The follow-up binds each accepted boundary to its exact client, active
+editing-context generation, range snapshot, and ticket in a FIFO queue. Every
+later input and lifecycle boundary drains queued work before changing state;
+stale scheduled tickets then do nothing. Remaining scalars from the same
+fallback event stay with the boundary ticket and resume through the Hangul path
+after insertion, independent of later shared-mode changes. A continuation is
+folded through an engine copy before its next host mutation, and its aggregate
+commit/marked output is owned by a phase-tracked intent so lifecycle or range
+query reentry can finish it exactly once. Deferred delivery no longer clears
+`markedText`.
+
+The deterministic check covers next-turn delivery, distinct whitespace FIFO
+ordering, zero-delay input, Backspace/navigation, mode and focus changes,
+separate client sessions, deactivation, stale tickets, reentrant host phases,
+and the `foo bar` middle-insertion result:
+
+```sh
+nix develop --command -- make deferred-boundary-check
+nix develop --command -- make swiftlint
+nix develop --command -- make build
+```
+
+The follow-up was verified with the installed debug app and the browser
+regressions on 2026-07-13 KST:
+
+```text
+hisle 0.1.14-debug, build 29
+replacementPolicy=current-selection-nsnotfound+split-boundary+state-safe-deferred-boundary+plain-commit-fast-path+strict-selection-consistency+conditional-postcommit-caret
+
+GUI smoke test: passed
+Firefox annyeong-word-repeats: `안녕 안녕 안녕 안녕foo bar` (exact match)
+Chrome stale-selection-annyeonghaseyo: `안녕하세요` (exact match)
+Confluence foo-bar-annyeong-space-backspace: `foo안녕 bar` (exact delta and full-text match)
+Confluence selectionchange events: 21
+Non-null payload counts: key 40, code 40, data 44, inputType 34, isComposing 74
+Confluence observer page errors: 0
+```
+
+Browser artifacts:
+
+```text
+build/firefox-ime/firefox-annyeong-repeats-final-integration-20260713-0623/
+build/chrome-ime/chrome-stale-selection-final-integration-20260713-0622/
+local/atlassian/runs/confluence-final-integration-reuse-20260713-0625/
 ```

@@ -127,9 +127,12 @@ marked-text update after a composition commit. Ordinary committed text with no
 active marked text must still use the current-selection sentinel and must not
 create or preserve an owned insertion range, because browser and rich-editor
 clients can report unstable explicit document ranges during plain Roman or
-standalone punctuation input. Clear owned ranges on user or host actions that
-can legitimately move the caret: mouse down, host-forwarded navigation/action
-keys, mode changes, deactivation, and external cancel/commit boundaries.
+standalone punctuation input. Do not query `selectedRange()` or `markedRange()`
+to make that plain-commit decision; the commit replacement decision reads those
+host ranges only while active marked text is being committed. Clear owned ranges
+on user or host actions that can legitimately move the caret: mouse down,
+host-forwarded navigation/action keys, mode changes, deactivation, and external
+cancel/commit boundaries.
 
 After `insertText(_:replacementRange:)` for an active composition commit, prefer
 a valid collapsed `selectedRange()` from the client as the next owned insertion
@@ -140,7 +143,11 @@ the wrong document position in the middle of rich editor content. When the
 pre-commit host selection is already consistent with the owned replacement
 range, derive continuation from that replacement range plus the committed text
 length, because fast browser input can expose a transient post-commit
-`selectedRange()` that is ahead of the intended caret.
+`selectedRange()` that is ahead of the intended caret. A non-collapsed
+pre-commit selection is consistent only when both its start and end match the
+owned replacement range; sharing just one boundary can be stale host state. A
+collapsed selection remains compatible at the replacement start, end, or one
+UTF-16 position after the end.
 
 For a whitespace `FlushThenEmit` boundary that closes active Hangul marked text,
 commit the active composition and the whitespace as separate host insertions.
@@ -152,6 +159,23 @@ Chrome/Confluence can insert the space but restore the caret to the position
 before that space. Advance the owned insertion range by the whitespace length
 for the next marked-text update, but do not let this rule apply to ordinary
 plain commits with no active marked text.
+
+Treat an accepted deferred boundary as session-owned input that must be emitted
+exactly once. Bind it to the originating IMK client, active editing-context
+generation, owned insertion-range snapshot, and a unique ticket. Resolve queued
+boundaries before any later scalar, key event, host action, mode or focus
+change, external commit/cancel, deactivation, or controller close; a scheduled
+callback whose ticket was already drained is a no-op. A multi-scalar fallback
+that reaches a deferred boundary keeps its remaining scalars as that ticket's
+continuation, so they run after the boundary instead of overtaking it in the
+same call stack. Fold a host-inactive continuation through a copy of the Hangul
+engine before its next host mutation, then publish the engine and apply the
+aggregate committed/marked output through one phase-owned transaction. The
+transaction must be visible before the first host call, including range reads,
+and reentrant lifecycle drains must finish its commit, selection, marked-text,
+and marked-range phases exactly once. Deferred delivery must not clear newer
+marked text, reinterpret the continuation through a later shared input mode, or
+reroute the boundary to a different client.
 
 Keep this policy app-agnostic. Do not add Confluence, Chromium, or editor-name
 branches unless a later bug proves that a general IMK range policy is

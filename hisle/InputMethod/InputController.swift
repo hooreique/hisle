@@ -19,6 +19,11 @@ final class InputController: IMKInputController {
     var hangulEngine = InputController.makeEngine()
     var markedText = MarkedTextState()
     var markedTextRangeTracker = MarkedTextRangeTracker()
+    var deferredBoundaryQueue = DeferredBoundaryQueue()
+    var deferredBoundaryContext = DeferredBoundaryContext()
+    var inFlightDeferredBoundaryCommit: DeferredBoundaryCommitIntent?
+    var inFlightDeferredBoundaryAggregateApply: DeferredBoundaryAggregateApplyIntent?
+    var inFlightDeferredBoundaryContinuation: DeferredBoundaryContinuation?
     var pendingMarkedTextReplacement: PendingMarkedTextReplacement?
     var lastUpdateCompositionReplacementRange: NSRange?
     var shiftTap = ShiftTapDetector()
@@ -39,19 +44,32 @@ final class InputController: IMKInputController {
     }
 
     override func activateServer(_ sender: Any!) {
+        drainDeferredBoundaryText()
+        deferredBoundaryContext.activate()
         KeyboardLayoutOverride.installColemak(for: sender ?? client(), logSuccess: true)
         logRuntimeIdentity(stage: "activated")
         super.activateServer(sender)
     }
 
     override func deactivateServer(_ sender: Any!) {
+        drainDeferredBoundaryText()
         flushBeforeForwarding(to: sender)
         markedTextRangeTracker.clear()
+        deferredBoundaryContext.deactivate()
         shiftTap = ShiftTapDetector()
         super.deactivateServer(sender)
     }
 
+    override func inputControllerWillClose() {
+        drainDeferredBoundaryText()
+        flushBeforeForwarding(to: client())
+        markedTextRangeTracker.clear()
+        deferredBoundaryContext.deactivate()
+        super.inputControllerWillClose()
+    }
+
     override func setValue(_ value: Any!, forTag tag: Int, client sender: Any!) {
+        drainDeferredBoundaryText()
         KeyboardLayoutOverride.installColemak(for: sender, logSuccess: true)
 
         if tag == kTextServiceInputModePropertyTag {
@@ -78,13 +96,23 @@ final class InputController: IMKInputController {
         continueTracking _: UnsafeMutablePointer<ObjCBool>!,
         client sender: Any
     ) -> Bool {
+        drainDeferredBoundaryText()
         flushBeforeForwarding(to: sender)
         markedTextRangeTracker.clear()
+        deferredBoundaryContext.advanceEditingContext()
         return false
     }
 
     override func handle(_ event: NSEvent, client sender: Any) -> Bool {
+        drainDeferredBoundaryText()
         KeyboardLayoutOverride.installColemak(for: sender)
+
+        if event.type == .leftMouseDown || event.type == .rightMouseDown || event.type == .otherMouseDown {
+            flushBeforeForwarding(to: sender)
+            markedTextRangeTracker.clear()
+            deferredBoundaryContext.advanceEditingContext()
+            return false
+        }
 
         if event.type == .flagsChanged {
             let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
@@ -125,13 +153,17 @@ final class InputController: IMKInputController {
     }
 
     @objc override func commitComposition(_ sender: Any!) {
+        drainDeferredBoundaryText()
         _ = apply(hangulEngine.process(.flush), to: sender)
         markedTextRangeTracker.clear()
+        deferredBoundaryContext.advanceEditingContext()
     }
 
     override func cancelComposition() {
+        drainDeferredBoundaryText()
         _ = apply(hangulEngine.process(.clear), to: client())
         markedTextRangeTracker.clear()
+        deferredBoundaryContext.advanceEditingContext()
     }
 
     @objc override func updateComposition() {
@@ -148,12 +180,19 @@ final class InputController: IMKInputController {
         )
         lastUpdateCompositionReplacementRange = replacementRange
 #if DEBUG
-        ClientRangeTracer(logger: logger).traceUpdateCompositionReplacementRange(
-            replacementRange,
-            reason: reason,
-            client: textClient(from: nil),
-            markedText: markedText
-        )
+        if inFlightDeferredBoundaryAggregateApply == nil {
+            ClientRangeTracer(logger: logger).traceUpdateCompositionReplacementRange(
+                replacementRange,
+                reason: reason,
+                client: textClient(from: nil),
+                markedText: markedText
+            )
+        } else {
+            let replacementMessage = "client-range update-composition " +
+                "replacement=\(NSStringFromRange(replacementRange)) reason=\(reason.rawValue) " +
+                "deferred-aggregate-in-flight"
+            logger.debug("\(replacementMessage, privacy: .public)")
+        }
 #endif
         return replacementRange
     }

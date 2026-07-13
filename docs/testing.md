@@ -2,6 +2,39 @@
 
 This document keeps long-lived verification procedures for `hisle`.
 
+## IMK Range Policy Check
+
+Run the deterministic marked-range policy table before GUI or browser
+regressions when changing selection consistency or post-commit caret tracking:
+
+```sh
+nix develop --command -- make marked-range-policy-check
+```
+
+The check compiles the production `MarkedTextRangePolicy` with a focused Swift
+runner. It verifies exact non-collapsed range equality, the supported collapsed
+caret positions, stale selections that share only one boundary, invalid ranges,
+integer overflow, and that plain commits avoid host range reads while active
+marked-text commits still read both ranges.
+
+## Deferred Boundary State Check
+
+Run the deterministic deferred-whitespace queue check before GUI or browser
+regressions when changing `FlushThenEmit` scheduling or input-session boundary
+handling:
+
+```sh
+nix develop --command -- make deferred-boundary-check
+```
+
+The check compiles the production deferred-boundary queue, editing-context
+generation, fallback batch reducer, marked-range tracker, and aggregate marked
+completion helper with a manual FIFO scheduler. It verifies next-turn delivery,
+multi-scalar and repeated whitespace ordering, zero-delay next input, Backspace
+and navigation ordering, mode/focus/client session transitions, deactivation,
+stale tickets, exact middle insertion, and reentrant commit/marked/range phases
+without sleeping or pumping a run loop.
+
 ## GUI Smoke Test
 
 Run this as a separate GUI check because InputMethodKit modifier-event delivery
@@ -130,10 +163,13 @@ Useful environment options:
 
 - `SEED`, default `1`.
 - `ITERATIONS`, default `1`.
-- `RUN_ID`, default timestamp plus a short random suffix.
+- `RUN_ID`, default timestamp plus a short random suffix. It must name a fresh
+  run directory; the wrapper refuses to overwrite an existing run.
 - `CHROME_PATH`, optional path to Chrome or Chrome for Testing.
 - `CHROME_REMOTE_DEBUGGING_PORT`, optional fixed Chrome remote debugging port.
-- `HISLE_CHROME_KEEP_OPEN=1`, leave Chrome open after artifact capture.
+- `HISLE_CHROME_KEEP_OPEN=1` is retained for compatibility, but the
+  Playwright-owned local Chrome closes after artifact capture so its profile
+  lock cannot outlive the observer.
 - `HISLE_CHROME_TARGET`, one of `textarea`, `contenteditable`, or `wysiwyg`;
   default `textarea`.
 - `HISLE_CHROME_SCENARIO`, one of `standard`, `click-during-composition`,
@@ -229,7 +265,9 @@ Artifacts are written under `build/chrome-ime/<run-id>/`:
 - `keys.jsonl`: Swift HID key-down/key-up events with sequence numbers,
   timestamps, key codes, flags, and planned delay.
 - `dom-events.jsonl`: capture-phase DOM keyboard, composition, input,
-  selection, focus, and blur events.
+  selection, focus, and blur events, including prototype-backed DOM values for
+  `key`, `code`, `data`, `inputType` (`input_type`), and `isComposing`
+  (`is_composing`).
 - `editor-chaos.jsonl`: editor maintenance events for WYSIWYG chaos scenarios.
 - `ime.log`: unified log stream for `hooreique.inputmethod.hisle`.
 - `runtime-identity.log`: post-run unified log snapshot of the running input
@@ -247,6 +285,50 @@ Triage guide:
 - Good IME logs with bad DOM events or textarea value points at the
   Chrome/macOS/browser interaction.
 - Good DOM events followed by later value mutation points at page JavaScript.
+
+### Browser Recorder Contract
+
+Run the browser observer contract tests after changing the shared DOM event
+recorder or either observer's instrumentation:
+
+```sh
+nix develop .#browser --command -- make browser-observer-check
+```
+
+The target installs the locked browser observer dependencies when they are
+missing. The recorder test launches the installed Chrome in headless mode and
+synthetically dispatches browser-native DOM event objects for keyboard,
+composition, input, and document `selectionchange`. It checks their serialized
+payloads, the mutation-aware bounded caret-context snapshot contract, and page
+errors. It also checks observer cleanup ordering and idempotence, HTTP port
+release, Firefox/geckodriver fallback cleanup, owned versus reused CDP Chrome,
+fresh run-directory collision handling, and wrapper job cleanup. Set
+`CHROME_PATH` to use a non-default Chrome executable. The same command also runs
+the deterministic Confluence page-identity tests.
+
+### Browser Repro Lifecycle
+
+The Chrome, Firefox, and live Confluence wrappers atomically create each run
+directory and reject an existing `RUN_ID` without changing its artifacts. Once
+an observer job starts, a small supervisor watches the wrapper process and owns
+the observer's detached process group. Wrapper success, errors, Ctrl-C,
+`SIGTERM`, and `SIGHUP` all pass through bounded cleanup. The supervisor
+forwards the signal to the observer group, allows up to eight seconds for
+graceful cleanup, then sends `SIGKILL` to any surviving observer, browser, or
+driver descendants. The Nushell `finally` path gives the supervisor up to ten
+seconds before stopping a remaining job.
+
+Observers close their HTTP server, trace, browser session, and owned child
+processes even when setup or artifact finalization fails. Firefox cleanup tries
+both `driver.quit()` and geckodriver service termination. A normal Chrome
+started by the Confluence observer is owned and receives the CDP
+`Browser.close` command; a browser selected with
+`HISLE_ATLASSIAN_REUSE_CHROME=1` is externally owned and is only disconnected.
+`HISLE_FIREFOX_KEEP_OPEN` and the normal-Chrome
+`HISLE_ATLASSIAN_KEEP_OPEN` path transfer browser ownership only after a
+successful finish. Playwright-owned Chrome contexts always close. Setup,
+finalization, and wrapper failures still close an owned browser and release its
+port and profile lock.
 
 ## Firefox IME Reproduction
 
@@ -295,21 +377,36 @@ instead of the local Chrome IME fixture. The test uses a separate persistent
 Chrome profile under `local/atlassian/chrome-profile/` so Atlassian cookies and
 site data survive across runs. Artifacts are written under
 `local/atlassian/runs/<run-id>/`. The whole `local/` tree is ignored by Git and
-can contain private session data.
+can contain private session data. The wrapper uses user-only creation
+permissions, normalizes the Atlassian, run, and profile directories to mode
+`0700`, and creates new artifact files with mode `0600`.
 
 Configure the target page with either `ATLASSIAN_CONFLUENCE_URL` or
 `local/atlassian/config.json`:
 
 ```json
 {
-  "page_url": "https://<site>.atlassian.net/wiki/spaces/<space>/pages/<page>/<title>",
-  "email": "<optional login email>"
+  "page_url": "https://<site>.atlassian.net/wiki/spaces/<space>/pages/<numeric-page-id>/<title>"
 }
 ```
 
-The older `local/atlassianinfo` form, `<site> <email>`, is still accepted as a
-fallback for opening the site, but use `page_url` for the live-page repro so the
-observer can navigate directly to the test page.
+The first whitespace-delimited value in the older `local/atlassianinfo` file is
+still accepted as a fallback site URL, but use `page_url` for the live-page
+repro so the observer can navigate directly to the test page.
+
+The observer reuses a browser tab only when its origin and numeric Confluence
+page ID match `page_url`; live edit runs require that numeric ID. The ID remains
+authoritative when a title slug or edit URL differs. If no matching tab
+appears, the observer opens a dedicated tab at `page_url`, and it refuses to
+click Edit or mark the driver ready for HID input if the resulting page
+identity cannot be verified.
+
+Run the deterministic identity check after changing this selection policy:
+
+```sh
+nix develop .#browser --command -- \
+  node --test tools/chrome-ime/atlassian_page_identity.test.mjs
+```
 
 First create or refresh the browser login session:
 
@@ -356,31 +453,30 @@ Useful environment options:
 - `HISLE_ATLASSIAN_TARGET_SELECTOR`, CSS selector for the editor if automatic
   detection picks the wrong `contenteditable`.
 - `HISLE_ATLASSIAN_INITIAL_CARET_OFFSET`, optional text offset for the initial
-  Confluence caret. Use a non-negative DOM Range text offset or `middle`; when
-  set, the final assertion checks the full expected Range text, not only
-  whether the inserted substring appears somewhere. The artifact still records
-  the editor's visible `innerText` separately as `value`.
-- `HISLE_ATLASSIAN_STRICT_FULL_TEXT=1`, require the same full expected Range
-  text assertion even when the caret offset is auto-discovered rather than
-  explicitly configured.
+  Confluence caret. Use a non-negative DOM Range text offset or `middle`.
+  Immediately before HID input, the driver asks the observer to refresh the
+  initial DOM Range text and resolved caret offset.
 - `HISLE_ATLASSIAN_EDIT=0`, require the page to already be in edit mode.
-- `HISLE_ATLASSIAN_EXPECTED_TEXT`, final text substring expected in the editor;
-  the driver sequence currently types the default `안녕하세요`.
+- `HISLE_ATLASSIAN_EXPECTED_TEXT`, override the exact document delta expected
+  from the selected scenario. Leading and trailing whitespace are significant.
+  This assertion override does not change the text typed by `roman-text`.
 - `HISLE_ATLASSIAN_SCENARIO=annyeonghaseyo-words`, type repeated
   `안녕하세요` words separated by spaces. Combine with
   `HISLE_ATLASSIAN_WORD_COUNT`, default `3`, to reproduce cursor jumps during
-  ordinary multi-word Hangul input.
+  ordinary multi-word Hangul input. The expected delta is generated from the
+  resolved word count, with no trailing space.
 - `HISLE_ATLASSIAN_SCENARIO=annyeong-space-backspace`, type `안녕`, press
-  Space, then press Backspace. The expected inserted text defaults to `안녕`;
-  combine it with `HISLE_ATLASSIAN_INITIAL_CARET_OFFSET` for a strict full-text
-  assertion inside existing Confluence content.
+  Space, then press Backspace. The expected document delta defaults to `안녕`.
 - `HISLE_ATLASSIAN_SCENARIO=foo-bar-annyeong-space-backspace`, type `foo bar`
   in Roman mode, move the caret back to immediately after `foo`, type `안녕 `,
-  then press Backspace. The expected visible text defaults to `foo안녕 bar`.
+  then press Backspace. The expected document delta defaults to `foo안녕 bar`.
 - `HISLE_ATLASSIAN_SCENARIO=roman-foo-bar`, type visible Roman text
-  `foo bar foo bar` through hisle Roman mode.
+  `foo bar foo bar` through hisle Roman mode; the expected document delta uses
+  the same text.
 - `HISLE_ATLASSIAN_SCENARIO=roman-text` with `HISLE_ATLASSIAN_ROMAN_TEXT`,
   type a custom visible lowercase Roman text string through hisle Roman mode.
+  `HISLE_ATLASSIAN_ROMAN_TEXT` is required and is the default expected document
+  delta for this scenario.
 - `HISLE_ATLASSIAN_HANGUL_BEFORE_EDITOR_CLICK=1`, select Hangul mode before
   focusing the Confluence editor. Use this to verify the intended fresh
   app/client Roman-mode initialization and to observe cursor placement at the
@@ -388,26 +484,43 @@ Useful environment options:
 - `HISLE_ATLASSIAN_KEEP_OPEN=1`, leave Chrome open after artifact capture.
 - `HISLE_ATLASSIAN_ALLOW_MISMATCH=1`, keep the run successful while preserving
   the observed mismatch in artifacts.
+- `HISLE_ATLASSIAN_TRACE=1`, opt into a Playwright trace. Tracing is off by
+  default because page snapshots can be large and can preserve private page
+  text, URLs, and screenshots.
 - `CHROME_PATH`, optional path to Chrome or Chrome for Testing.
 - `CHROME_REMOTE_DEBUGGING_PORT`, optional fixed Chrome remote debugging port.
+  A new Confluence Chrome requires an unused port and verifies that the CDP
+  endpoint uses the configured profile; reuse mode expects an existing port.
 - `HISLE_ATLASSIAN_REUSE_CHROME=1`, connect to an already-open Chrome on
   `CHROME_REMOTE_DEBUGGING_PORT` instead of launching a new one.
-- `RUN_ID`, stable run directory name under `local/atlassian/runs/`.
+- `RUN_ID`, stable run directory name under `local/atlassian/runs/`. It must be
+  unused; the wrapper preserves and rejects an existing run directory.
+
+For every scenario, success requires the final DOM Range text to equal the
+captured initial text with the exact expected document delta inserted at the
+captured caret. `contains_expected_text` remains in the artifacts for diagnosis
+but never determines success.
 
 Artifacts:
 
 - `keys.jsonl`: Swift HID key-down/key-up events.
 - `dom-events.jsonl`: capture-phase DOM keyboard, composition, input, selection,
-  focus, and blur events from the Confluence page.
+  focus, and blur events from the Confluence page, including prototype-backed
+  DOM values for `key`, `code`, `data`, `inputType` (`input_type`), and
+  `isComposing` (`is_composing`). Each event keeps the editor text length,
+  absolute selection offsets, and at most 32 UTF-16 code units of context on
+  either side of the caret; it does not copy the full editor text.
 - `console.jsonl`: browser console and page-error records.
 - `ime.log`: unified log stream for `hooreique.inputmethod.hisle`.
 - `runtime-identity.log`: post-run unified log snapshot of the running input
   method app version, bundle path, process id, and replacement policy.
 - `driver-state.json`, `observer-ready.json`, and `environment.json`: run
   metadata, selected input source, profile path, page URL, and timing data.
-- `final-state.json`: final editor text summary, expected-text match, and event
-  anomaly counters.
-- `screenshot.png` and `trace.zip`: final page screenshot and Playwright trace.
+- `final-state.json`: final editor text summary, exact expected full text and
+  match, diagnostic substring match, and event anomaly counters.
+- `screenshot.png`: final page screenshot.
+- `trace.zip`: optional Playwright trace, present only when
+  `HISLE_ATLASSIAN_TRACE=1`.
 
 ### Debug Client Range Trace
 

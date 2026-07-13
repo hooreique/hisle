@@ -13,12 +13,14 @@ CODE_SIGN_IDENTITY ?=
 DEVELOPMENT_TEAM ?=
 OTHER_CODE_SIGN_FLAGS ?=
 NU ?= nu
+NPM ?= npm
 SWIFT ?= swift
 SWIFTLINT ?= swiftlint
+BROWSER_OBSERVER_DIR ?= tools/chrome-ime
 XCODEBUILD_ENV := env -u CC -u CXX -u LD -u SDKROOT -u NIX_CC -u NIX_CFLAGS_COMPILE -u NIX_CFLAGS_LINK -u NIX_LDFLAGS
 XCODEBUILD := $(XCODEBUILD_ENV) /usr/bin/xcodebuild
 
-.PHONY: all help require-nix-shell require-app-shell require-default-shell require-core-shell require-browser-shell require-icon-shell build dmg install-debug uninstall clean icons check-toolchain version-check swiftlint core-spec-check gui-smoke-test chrome-ime-repro firefox-ime-repro atlassian-confluence-login atlassian-confluence-repro
+.PHONY: all help require-nix-shell require-app-shell require-default-shell require-core-shell require-browser-shell require-icon-shell build dmg install-debug uninstall clean icons check-toolchain version-check swiftlint marked-range-policy-check deferred-boundary-check browser-observer-check core-spec-check gui-smoke-test chrome-ime-repro firefox-ime-repro atlassian-confluence-login atlassian-confluence-repro
 
 all: help
 
@@ -32,6 +34,9 @@ help:
 	@echo '    nix develop --command -- make check-toolchain'
 	@echo '    nix develop --command -- make version-check'
 	@echo '    nix develop --command -- make swiftlint'
+	@echo '    nix develop --command -- make marked-range-policy-check'
+	@echo '    nix develop --command -- make deferred-boundary-check'
+	@echo '    nix develop .#browser --command -- make browser-observer-check'
 	@echo '    nix develop --command -- make gui-smoke-test'
 	@echo '    nix develop .#core --command -- make core-spec-check'
 	@echo '    nix develop .#browser --command -- make chrome-ime-repro'
@@ -80,6 +85,7 @@ require-core-shell: require-nix-shell
 require-browser-shell: require-nix-shell
 	@if [ "$$HISLE_DEV_SHELL" != 'browser' ]; then \
 		echo 'Run this target from the browser Nix dev shell:' >&2; \
+		echo '    nix develop .#browser --command -- make browser-observer-check' >&2; \
 		echo '    nix develop .#browser --command -- make chrome-ime-repro' >&2; \
 		echo '    nix develop .#browser --command -- make firefox-ime-repro' >&2; \
 		echo '    nix develop .#browser --command -- make atlassian-confluence-repro' >&2; \
@@ -106,6 +112,24 @@ version-check: require-default-shell
 
 swiftlint: require-app-shell
 	$(SWIFTLINT) lint
+
+marked-range-policy-check: require-default-shell
+	$(NU) tools/marked_text_range_policy_check.nu
+
+deferred-boundary-check: require-default-shell
+	$(NU) tools/deferred_boundary_check.nu
+
+browser-observer-check: require-browser-shell
+	@if [ ! -f '$(BROWSER_OBSERVER_DIR)/node_modules/playwright-core/package.json' ]; then \
+		echo 'Installing browser observer Node dependencies...'; \
+		if [ -f '$(BROWSER_OBSERVER_DIR)/package-lock.json' ]; then \
+			$(NPM) --prefix '$(BROWSER_OBSERVER_DIR)' ci --ignore-scripts --no-audit --no-fund; \
+		else \
+			$(NPM) --prefix '$(BROWSER_OBSERVER_DIR)' install --ignore-scripts --no-audit --no-fund; \
+		fi; \
+	fi
+	$(NPM) --prefix '$(BROWSER_OBSERVER_DIR)' test
+	$(NU) tools/browser_repro_support_check.nu
 
 build: require-app-shell
 	$(XCODEBUILD) \
