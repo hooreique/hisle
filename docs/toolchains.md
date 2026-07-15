@@ -41,8 +41,8 @@ Lint Swift sources with SwiftLint:
 nix develop --command -- make swiftlint
 ```
 
-SwiftLint uses `.swiftlint.yml` and excludes generated SwiftPM build output
-under `hisle-core/.build`.
+SwiftLint uses `.swiftlint.yml` and excludes generated Xcode/build artifacts
+under `build` and SwiftPM build output under `hisle-core/.build`.
 
 Run the deterministic InputMethodKit marked-range policy check:
 
@@ -50,10 +50,28 @@ Run the deterministic InputMethodKit marked-range policy check:
 nix develop --command -- make marked-range-policy-check
 ```
 
+Run the deterministic busy-app snapshot and configuration initializer check:
+
+```sh
+nix develop --command -- make busy-apps-configuration-check
+```
+
+Build and run the bundled companion CLI contract check:
+
+```sh
+nix develop --command -- make hisle-cli-check
+```
+
 Run the deterministic deferred-whitespace queue and lifecycle check:
 
 ```sh
 nix develop --command -- make deferred-boundary-check
+```
+
+Run the deterministic frontmost-app monitor check:
+
+```sh
+nix develop --command -- make frontmost-monitor-check
 ```
 
 Run the deterministic browser recorder, lifecycle, and wrapper-support checks:

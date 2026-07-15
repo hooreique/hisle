@@ -664,6 +664,7 @@ private final class DeferredBoundaryHarness {
 @main
 private enum DeferredBoundaryCheck {
     static func main() throws {
+        try checkDefaultProfileSynchronousPolicy()
         try checkFallbackReducer()
         try checkMiddleBackspace()
         try checkZeroDelayNavigationAndLifecycleTransitions()
@@ -671,7 +672,83 @@ private enum DeferredBoundaryCheck {
         try checkHostPhaseReentryIsExactlyOnce()
         try checkRangeQueryReentryAndOwnership()
 
-        print("Deferred boundary check passed core batch, ordering, lifecycle, ticket, and reentry scenarios.")
+        print(
+            "Deferred boundary check passed default synchronous/scalar policy and busy " +
+                "batch, ordering, lifecycle, ticket, and reentry scenarios."
+        )
+    }
+
+    // swiftlint:disable:next function_body_length
+    private static func checkDefaultProfileSynchronousPolicy() throws {
+        let idlePlan = DefaultHostApplyPlan.make(
+            committedText: "",
+            markedText: "",
+            wasMarkedTextActive: false
+        )
+        try expectEqual(idlePlan.committedText, nil, "default idle commit")
+        try expectEqual(idlePlan.markedTextAction, DefaultMarkedTextAction.none, "default idle mark")
+
+        let clearPlan = DefaultHostApplyPlan.make(
+            committedText: "",
+            markedText: "",
+            wasMarkedTextActive: true
+        )
+        try expectEqual(clearPlan.committedText, nil, "default clear commit")
+        try expectEqual(clearPlan.markedTextAction, DefaultMarkedTextAction.clear, "default clear mark")
+
+        let boundaryPlan = DefaultHostApplyPlan.make(
+            committedText: "가 ",
+            markedText: "",
+            wasMarkedTextActive: true
+        )
+        try expectEqual(boundaryPlan.committedText, "가 ", "default synchronous boundary text")
+        try expectEqual(
+            boundaryPlan.needsMarkedTextContinuation,
+            false,
+            "default boundary continuation"
+        )
+        try expectEqual(
+            boundaryPlan.markedTextAction,
+            DefaultMarkedTextAction.none,
+            "default boundary marked action"
+        )
+
+        let markedOnlyPlan = DefaultHostApplyPlan.make(
+            committedText: "",
+            markedText: "가",
+            wasMarkedTextActive: false
+        )
+        try expectEqual(markedOnlyPlan.committedText, nil, "default marked-only commit")
+        try expectEqual(
+            markedOnlyPlan.markedTextAction,
+            DefaultMarkedTextAction.update("가"),
+            "default marked-only update"
+        )
+
+        let continuationPlan = DefaultHostApplyPlan.make(
+            committedText: "가",
+            markedText: "나",
+            wasMarkedTextActive: true
+        )
+        try expectEqual(continuationPlan.committedText, "가", "default continuation commit")
+        try expectEqual(
+            continuationPlan.needsMarkedTextContinuation,
+            true,
+            "default pending continuation"
+        )
+        try expectEqual(
+            continuationPlan.markedTextAction,
+            DefaultMarkedTextAction.update("나"),
+            "default continuation marked update"
+        )
+
+        var visitedScalars: [String] = []
+        let handled = DefaultHostFallbackProcessor.process(Array("a 😀b".unicodeScalars)) { scalar in
+            visitedScalars.append(String(scalar))
+            return scalar == "😀" ? nil : scalar == "b"
+        }
+        try expectEqual(visitedScalars, ["a", " ", "😀", "b"], "default scalar fallback order")
+        try expectEqual(handled, true, "default scalar fallback handled aggregate")
     }
 
     private static func checkFallbackReducer() throws {

@@ -1,4 +1,5 @@
 const root_dir = path self ..
+const default_policy_source = "hisle/InputMethod/DefaultHostIntegrationPolicy.swift"
 const queue_source = "hisle/InputMethod/DeferredBoundaryQueue.swift"
 const policy_source = "hisle/InputMethod/MarkedTextRangePolicy.swift"
 const aggregate_state_source = "hisle/InputMethod/DeferredBoundaryAggregateState.swift"
@@ -10,5 +11,5 @@ cd $root_dir
 mkdir ([$root_dir "build" "tools"] | path join)
 
 hide-env -i CC CXX LD SDKROOT NIX_CC NIX_CFLAGS_COMPILE NIX_CFLAGS_LINK NIX_LDFLAGS
-^/usr/bin/xcrun swiftc $queue_source $policy_source $aggregate_state_source $check_source -framework InputMethodKit -o $check_output
+^/usr/bin/xcrun swiftc $default_policy_source $queue_source $policy_source $aggregate_state_source $check_source -framework InputMethodKit -o $check_output
 ^$check_output

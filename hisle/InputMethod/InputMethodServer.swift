@@ -4,6 +4,7 @@ import os
 
 final class InputMethodServer {
     static let shared = InputMethodServer()
+    static var busyAppsSnapshot = BusyAppsSnapshot.empty
 
     let server: IMKServer
     private let logger = Logger(subsystem: "hooreique.inputmethod.hisle", category: "InputMethodServer")

@@ -2,6 +2,41 @@
 
 This document keeps long-lived verification procedures for `hisle`.
 
+## Busy Apps Configuration Check
+
+Run the deterministic configuration check after changing profile selection,
+configuration parsing, or `hisle init`:
+
+```sh
+nix develop --command -- make busy-apps-configuration-check
+```
+
+It verifies nonempty `XDG_CONFIG_HOME` precedence, empty-variable and `HOME`
+fallback behavior, trimming, comments, duplicates, empty files, missing and
+unreadable-file failures, invalid UTF-8, exact case-sensitive membership,
+unidentified-client fallback to `default`, and that a loaded snapshot does not
+reload changed contents. It separately verifies that snapshot loading does not
+create a missing file, while explicit initialization creates missing parent
+directories and a zero-byte file at each resolved path, preserves existing
+bytes and permissions across repeated runs, accepts a symbolic link that
+resolves to a regular file, and rejects paths that resolve to directories or
+other non-regular files.
+
+## Companion CLI Check
+
+Run the built-helper check after changing `hisle init` or the existing mode,
+version, and help command dispatch:
+
+```sh
+nix develop --command -- make hisle-cli-check
+```
+
+The target builds the app, then runs the bundled helper only against temporary
+XDG/HOME directories. It verifies exact `init` path output, empty-file and
+parent creation, repeated-run content preservation, path-bearing stderr and
+exit status 73 for a destination collision, and the existing no-argument,
+`--version`, and `--help` contracts.
+
 ## IMK Range Policy Check
 
 Run the deterministic marked-range policy table before GUI or browser
@@ -11,9 +46,11 @@ regressions when changing selection consistency or post-commit caret tracking:
 nix develop --command -- make marked-range-policy-check
 ```
 
-The check compiles the production `MarkedTextRangePolicy` with a focused Swift
-runner. It verifies exact non-collapsed range equality, the supported collapsed
-caret positions, stale selections that share only one boundary, invalid ranges,
+The check compiles both production range policies with a focused Swift runner.
+For `default`, it verifies v0.1.8 host range reads, marked-range replacement,
+loose diagnostic consistency, and the single pending continuation. For `busy`,
+it verifies exact non-collapsed range equality, the supported collapsed caret
+positions, stale selections that share only one boundary, invalid ranges,
 integer overflow, and that plain commits avoid host range reads while active
 marked-text commits still read both ranges.
 
@@ -27,13 +64,29 @@ handling:
 nix develop --command -- make deferred-boundary-check
 ```
 
-The check compiles the production deferred-boundary queue, editing-context
+The check first fixes `default` behavior: an active composition plus whitespace
+stays one synchronous committed string, a commit-plus-mark requests the single
+continuation, and fallback invokes the host path scalar by scalar. It then
+compiles the production `busy` deferred-boundary queue, editing-context
 generation, fallback batch reducer, marked-range tracker, and aggregate marked
 completion helper with a manual FIFO scheduler. It verifies next-turn delivery,
 multi-scalar and repeated whitespace ordering, zero-delay next input, Backspace
 and navigation ordering, mode/focus/client session transitions, deactivation,
 stale tickets, exact middle insertion, and reentrant commit/marked/range phases
 without sleeping or pumping a run loop.
+
+## Frontmost Monitor Check
+
+Run the deterministic CLI monitor check after changing `hisle frontmost`:
+
+```sh
+nix develop --command -- make frontmost-monitor-check
+```
+
+It verifies immediate first output, output on identifier change, consecutive
+duplicate suppression, missing-identifier stderr handling, and continued output
+after an unidentified transition. It also fixes exact unadorned stdout and
+diagnostic stderr line framing through real file handles.
 
 ## GUI Smoke Test
 
@@ -74,6 +127,8 @@ Requirements:
 - Sublime Text cold start can be slow. The driver waits for the app, the smoke
   file window, and frontmost focus before sending key events.
 - Do not type or change focus while the script is running.
+- Leave `busy-apps.txt` missing or empty, then restart `hisle`, so Sublime Text
+  exercises `profile=default`.
 
 Scripted smoke sequence:
 
@@ -120,6 +175,9 @@ Scripted smoke sequence:
 
 This smoke test passes only if the final saved file content is exactly
 ``f`의f어ㅜff`` and no extra Shift-related text appears in the saved file.
+Confirm the matching `controller runtime` log has Sublime Text's
+`clientBundleIdentifier` and `profile=default`. The helper checks in the
+sequence also preserve the existing no-option `roman`/`hangul` CLI contract.
 
 Known non-issues:
 
@@ -148,6 +206,13 @@ Preferred command:
 ```sh
 nix develop .#browser --command -- make chrome-ime-repro
 ```
+
+Before a `busy` profile run, focus the Chrome build being tested and use
+`hisle frontmost` to capture its exact bundle identifier. Add that identifier to
+`busy-apps.txt`, restart `hisle`, and confirm the matching `controller runtime`
+log says `profile=busy`. Do not assume that Chrome, Chrome for Testing, and
+other Chromium builds share an identifier. Restore the intended configuration
+and restart again after the diagnostic run.
 
 To run only the repro after a debug install:
 
@@ -271,7 +336,8 @@ Artifacts are written under `build/chrome-ime/<run-id>/`:
 - `editor-chaos.jsonl`: editor maintenance events for WYSIWYG chaos scenarios.
 - `ime.log`: unified log stream for `hooreique.inputmethod.hisle`.
 - `runtime-identity.log`: post-run unified log snapshot of the running input
-  method app version, bundle path, process id, and replacement policy.
+  method app version, bundle path, process id, client bundle identifier, host
+  profile, and replacement policy.
 - `final-state.json`: final value, HTML for non-textarea targets, selection,
   expected value, match result, and anomaly counters.
 - `screenshot.png`: final browser screenshot.
@@ -439,6 +505,13 @@ Run the live Confluence repro:
 nix develop .#browser --command -- make atlassian-confluence-repro
 ```
 
+Confluence Chrome runs intended to exercise the deferred space/caret handling
+must use the `busy` profile setup described in the Chrome section. In addition
+to the normal scenarios, use `annyeong-space-backspace` or
+`foo-bar-annyeong-space-backspace` when checking the whitespace/Backspace
+boundary. Confirm `profile=busy` in `runtime-identity.log` before interpreting
+the result.
+
 The target builds and installs the debug input method, opens the configured
 Confluence page with the persistent profile, clicks the page Edit action when an
 editor is not already open, focuses the first usable editor `contenteditable`,
@@ -513,7 +586,8 @@ Artifacts:
 - `console.jsonl`: browser console and page-error records.
 - `ime.log`: unified log stream for `hooreique.inputmethod.hisle`.
 - `runtime-identity.log`: post-run unified log snapshot of the running input
-  method app version, bundle path, process id, and replacement policy.
+  method app version, bundle path, process id, client bundle identifier, host
+  profile, and replacement policy.
 - `driver-state.json`, `observer-ready.json`, and `environment.json`: run
   metadata, selected input source, profile path, page URL, and timing data.
 - `final-state.json`: final editor text summary, exact expected full text and
@@ -522,7 +596,17 @@ Artifacts:
 - `trace.zip`: optional Playwright trace, present only when
   `HISLE_ATLASSIAN_TRACE=1`.
 
-### Debug Client Range Trace
+## Teams Manual Smoke Test
+
+When Microsoft Teams is installed and a test account can sign in, focus its
+editor, obtain the exact identifier with `hisle frontmost`, list it in
+`busy-apps.txt`, restart `hisle`, and confirm `profile=busy` in the controller
+runtime log. Manually check ordinary multi-word Hangul input, Space followed by
+Backspace, mode selection, and input-source round trips. Record Teams as
+unverified when local installation or login is unavailable; do not add its
+identifier as a built-in default.
+
+## Debug Client Range Trace
 
 Debug builds can emit opt-in `IMKTextInput` range traces for cursor and marked
 text bugs. The trace records stage names, `selectedRange`, `markedRange`,

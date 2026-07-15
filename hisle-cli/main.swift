@@ -1,3 +1,4 @@
+import AppKit
 import Darwin
 import Foundation
 import HisleCore
@@ -5,6 +6,7 @@ import HisleCore
 private enum ExitCode {
     static let success: Int32 = 0
     static let usage: Int32 = 64
+    static let cannotCreate: Int32 = 73
 }
 
 private enum ModeState {
@@ -31,9 +33,11 @@ private enum ModeState {
 
 private func printHelp() {
     print("""
-    usage: hisle [--help] [--version]
+    usage: hisle [init | frontmost | --help | --version]
 
     Without options, prints the current input mode: roman or hangul.
+    init creates busy-apps.txt if missing and prints its path.
+    frontmost prints the current app bundle identifier and monitors changes.
     """)
 }
 
@@ -97,6 +101,33 @@ private func printError(_ message: String) {
     FileHandle.standardError.write(Data("hisle: \(message)\n".utf8))
 }
 
+private func monitorFrontmostApplications() {
+    let workspace = NSWorkspace.shared
+    let output = FrontmostApplicationOutput(
+        standardOutput: .standardOutput,
+        standardError: .standardError
+    )
+    let monitor = FrontmostApplicationMonitor(
+        outputIdentifier: output.writeIdentifier,
+        outputMissingIdentifier: output.writeMissingIdentifier
+    )
+    let observer = workspace.notificationCenter.addObserver(
+        forName: NSWorkspace.didActivateApplicationNotification,
+        object: nil,
+        queue: .main
+    ) { notification in
+        let application = notification.userInfo?[NSWorkspace.applicationUserInfoKey]
+            as? NSRunningApplication
+        monitor.observe(bundleIdentifier: application?.bundleIdentifier)
+    }
+
+    monitor.observe(bundleIdentifier: workspace.frontmostApplication?.bundleIdentifier)
+
+    withExtendedLifetime(observer) {
+        RunLoop.main.run()
+    }
+}
+
 let arguments = Array(CommandLine.arguments.dropFirst())
 
 switch arguments {
@@ -108,6 +139,22 @@ case ["--help"], ["-h"]:
     exit(ExitCode.success)
 case ["--version"]:
     printVersion()
+    exit(ExitCode.success)
+case ["init"]:
+    let configurationFileURL = BusyAppsSnapshot.configurationFileURL()
+    do {
+        let result = try BusyAppsSnapshot.initializeConfigurationFile()
+        print(result.configurationFileURL.path)
+        exit(ExitCode.success)
+    } catch {
+        printError(
+            "could not initialize busy apps configuration at \(configurationFileURL.path): " +
+                error.localizedDescription
+        )
+        exit(ExitCode.cannotCreate)
+    }
+case ["frontmost"]:
+    monitorFrontmostApplications()
     exit(ExitCode.success)
 default:
     printError("unknown arguments: \(arguments.joined(separator: " "))")

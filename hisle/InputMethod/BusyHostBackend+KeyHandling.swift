@@ -16,7 +16,7 @@ private struct HangulFallbackBatchPreparation {
     let batch: DeferredBoundaryFallbackBatch
 }
 
-extension InputController {
+extension BusyHostBackend {
     func handleKeyInput(
         text: String?,
         keyCode: UInt16,

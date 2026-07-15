@@ -10,6 +10,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             "NSApplicationCrashOnExceptions": true
         ])
 
+        let busyAppsSnapshot = BusyAppsSnapshot.load()
+        InputMethodServer.busyAppsSnapshot = busyAppsSnapshot
+        let configurationPath = busyAppsSnapshot.configurationFileURL.path
+        let configurationMessage = "busy apps configuration: path=\(configurationPath) " +
+            "entries=\(busyAppsSnapshot.bundleIdentifiers.count)"
+        logger.notice("\(configurationMessage, privacy: .public)")
+        if let loadErrorDescription = busyAppsSnapshot.loadErrorDescription {
+            let readFailureMessage = "busy apps configuration read failed: path=\(configurationPath) " +
+                "error=\(loadErrorDescription)"
+            logger.error("\(readFailureMessage, privacy: .public)")
+        }
+
         _ = InputMethodServer.shared
         logger.notice("application launched")
         logger.notice("core initialized: \(self.hisleCore.logSummary, privacy: .public)")

@@ -2,7 +2,7 @@ import Foundation
 import InputMethodKit
 import os
 
-extension InputController {
+extension BusyHostBackend {
     func insertCompositionBeforeDeferredBoundary(
         _ compositionText: String,
         boundaryText: String,
@@ -127,8 +127,12 @@ extension InputController {
             contextGeneration: contextGeneration,
             expectedInsertionRange: markedTextRangeTracker.insertionRange,
             continuationScalars: continuationScalars
-        ) { [self] ticket in
-            resolveScheduledBoundaryText(ticket)
+        ) { [self, inputController = inputController] ticket in
+            // v0.1.15 captured InputController directly; preserve that lifetime
+            // while the selected backend owns the deferred callback.
+            withExtendedLifetime(inputController) {
+                resolveScheduledBoundaryText(ticket)
+            }
         }
     }
 
