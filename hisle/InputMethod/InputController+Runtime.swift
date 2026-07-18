@@ -3,15 +3,8 @@ import HisleCore
 import os
 
 extension InputController {
-    static func makeEngine() -> ColeSebeolEngine {
-        do {
-            return try ColeSebeolEngine()
-        } catch {
-            fatalError("Failed to initialize ColeSebeolEngine: \(error)")
-        }
-    }
-
     func logRuntimeIdentity(stage: String) {
+        let clientBundleIdentifier = self.clientBundleIdentifier ?? "unknown"
         let message = [
             "controller runtime stage=\(stage)",
             "buildProfile=\(Self.buildProfile)",
@@ -20,7 +13,9 @@ extension InputController {
             "build=\(Self.bundleInfoValue(for: "CFBundleVersion"))",
             "pid=\(ProcessInfo.processInfo.processIdentifier)",
             "bundle=\(Bundle.main.bundleURL.path)",
-            "replacementPolicy=\(MarkedTextRangePolicy.policyID)"
+            "clientBundleIdentifier=\(clientBundleIdentifier)",
+            "profile=\(hostProfile.rawValue)",
+            "replacementPolicy=\(replacementPolicyID)"
         ].joined(separator: " ")
         logger.notice("\(message, privacy: .public)")
     }

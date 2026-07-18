@@ -8,6 +8,8 @@
 
 /* Begin PBXBuildFile section */
 		343DF4BA2FB300000080BE6F /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = 343DF4BF2FB300000080BE6F /* main.swift */; };
+		343DF4D12FB500000080BE6F /* FrontmostApplicationMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 343DF4D22FB500000080BE6F /* FrontmostApplicationMonitor.swift */; };
+		343DF4D32FB600000080BE6F /* BusyAppsSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 343DF4D42FB600000080BE6F /* BusyAppsSnapshot.swift */; };
 		343DF4BB2FB300000080BE6F /* HisleCore in Frameworks */ = {isa = PBXBuildFile; productRef = 343DF4B92FB200000080BE6F /* HisleCore */; };
 		343DF4BC2FB300000080BE6F /* hisle in Copy CLI */ = {isa = PBXBuildFile; fileRef = 343DF4C02FB300000080BE6F /* hisle */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 		343DF4B72FB200000080BE6F /* HisleCore in Frameworks */ = {isa = PBXBuildFile; productRef = 343DF4B92FB200000080BE6F /* HisleCore */; };
@@ -41,6 +43,8 @@
 /* Begin PBXFileReference section */
 		343DF4A22FB068A60080BE6F /* hisle.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = hisle.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		343DF4BF2FB300000080BE6F /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
+		343DF4D22FB500000080BE6F /* FrontmostApplicationMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FrontmostApplicationMonitor.swift; sourceTree = "<group>"; };
+		343DF4D42FB600000080BE6F /* BusyAppsSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = BusyAppsSnapshot.swift; path = hisle/App/BusyAppsSnapshot.swift; sourceTree = SOURCE_ROOT; };
 		343DF4C02FB300000080BE6F /* hisle */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = hisle; sourceTree = BUILT_PRODUCTS_DIR; };
 		343DF4B42FB100000080BE6F /* InputMethodKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = InputMethodKit.framework; path = System/Library/Frameworks/InputMethodKit.framework; sourceTree = SDKROOT; };
 		343DF4D02FB400000080BE6F /* HisleVersion.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = hisle/Config/HisleVersion.xcconfig; sourceTree = "<group>"; };
@@ -105,6 +109,8 @@
 		343DF4C12FB300000080BE6F /* hisle-cli */ = {
 			isa = PBXGroup;
 			children = (
+				343DF4D42FB600000080BE6F /* BusyAppsSnapshot.swift */,
+				343DF4D22FB500000080BE6F /* FrontmostApplicationMonitor.swift */,
 				343DF4BF2FB300000080BE6F /* main.swift */,
 			);
 			path = "hisle-cli";
@@ -238,6 +244,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				343DF4D32FB600000080BE6F /* BusyAppsSnapshot.swift in Sources */,
+				343DF4D12FB500000080BE6F /* FrontmostApplicationMonitor.swift in Sources */,
 				343DF4BA2FB300000080BE6F /* main.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

@@ -3,7 +3,7 @@ import HisleCore
 import InputMethodKit
 import os
 
-extension InputController {
+extension BusyHostBackend {
     func process(_ input: ColeSebeolInput, client sender: Any?) -> Bool {
         drainDeferredBoundaryText()
         let boundaryText = markedText.isActive ? flushThenEmitBoundaryText(for: input) : nil
@@ -90,13 +90,6 @@ extension InputController {
         }
 
         return true
-    }
-
-    func textClient(from sender: Any?) -> IMKTextInput? {
-        if let client = sender as? IMKTextInput {
-            return client
-        }
-        return client()
     }
 
     private func commitText(_ text: String, client sender: Any?) -> Bool {

@@ -14,6 +14,26 @@ struct ClientRangeTracer {
     }
 
     func logInconsistentMarkedRangeIfNeeded(client: IMKTextInput?, markedText: MarkedTextState) {
+        logInconsistentMarkedRangeIfNeeded(
+            client: client,
+            markedText: markedText,
+            isConsistent: MarkedTextRangePolicy.isSelectionRange
+        )
+    }
+
+    func logDefaultInconsistentMarkedRangeIfNeeded(client: IMKTextInput?, markedText: MarkedTextState) {
+        logInconsistentMarkedRangeIfNeeded(
+            client: client,
+            markedText: markedText,
+            isConsistent: DefaultMarkedTextRangePolicy.isSelectionRange
+        )
+    }
+
+    private func logInconsistentMarkedRangeIfNeeded(
+        client: IMKTextInput?,
+        markedText: MarkedTextState,
+        isConsistent: (NSRange, NSRange) -> Bool
+    ) {
         guard isEnabled, markedText.isActive, let client else {
             return
         }
@@ -26,7 +46,7 @@ struct ClientRangeTracer {
 
         if markedRange.location != NSNotFound,
            markedRange.length > 0,
-           MarkedTextRangePolicy.isSelectionRange(selectedRange, consistentWithMarkedRange: markedRange) {
+           isConsistent(selectedRange, markedRange) {
             return
         }
 
@@ -82,9 +102,56 @@ struct ClientRangeTracer {
         logger.debug("\(message, privacy: .public)")
     }
 
+    func traceDefaultReplacementRange(
+        _ decision: DefaultMarkedTextReplacementDecision,
+        markedText: MarkedTextState
+    ) {
+        guard isEnabled else {
+            return
+        }
+
+        let message = [
+            "client-range replacement=\(NSStringFromRange(decision.replacementRange))",
+            "reason=\(decision.reason.rawValue)",
+            "selected=\(NSStringFromRange(decision.selectedRange))",
+            "marked=\(NSStringFromRange(decision.markedRange))",
+            "hasMarkedText=\(markedText.isActive)",
+            "currentMarkedLength=\(markedText.utf16Count)"
+        ].joined(separator: " ")
+        logger.debug("\(message, privacy: .public)")
+    }
+
     func traceUpdateCompositionReplacementRange(
         _ replacementRange: NSRange,
         reason: MarkedTextRangeReason,
+        client: IMKTextInput?,
+        markedText: MarkedTextState
+    ) {
+        guard isEnabled else {
+            return
+        }
+
+        guard let client else {
+            let message = "client-range update-composition " +
+                "replacement=\(NSStringFromRange(replacementRange)) reason=\(reason.rawValue) missing-client"
+            logger.debug("\(message, privacy: .public)")
+            return
+        }
+
+        let message = [
+            "client-range update-composition replacement=\(NSStringFromRange(replacementRange))",
+            "reason=\(reason.rawValue)",
+            "selected=\(NSStringFromRange(client.selectedRange()))",
+            "marked=\(NSStringFromRange(client.markedRange()))",
+            "hasMarkedText=\(markedText.isActive)",
+            "currentMarkedLength=\(markedText.utf16Count)"
+        ].joined(separator: " ")
+        logger.debug("\(message, privacy: .public)")
+    }
+
+    func traceDefaultUpdateCompositionReplacementRange(
+        _ replacementRange: NSRange,
+        reason: DefaultMarkedTextRangeReason,
         client: IMKTextInput?,
         markedText: MarkedTextState
     ) {

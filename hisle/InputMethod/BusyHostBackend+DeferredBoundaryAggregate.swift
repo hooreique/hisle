@@ -2,7 +2,7 @@ import Foundation
 import InputMethodKit
 import os
 
-extension InputController {
+extension BusyHostBackend {
     @discardableResult
     func finishDeferredBoundaryFallbackAggregate(
         _ expectedIntent: DeferredBoundaryAggregateApplyIntent? = nil

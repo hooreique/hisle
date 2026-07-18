@@ -1,3 +1,4 @@
+// swiftlint:disable file_length
 import Foundation
 
 private struct SelectionConsistencyExample {
@@ -23,6 +24,7 @@ private struct ReplacementDecisionFailure: Error, CustomStringConvertible {
 }
 
 @main
+// swiftlint:disable:next type_body_length
 private enum MarkedTextRangePolicyCheck {
     private static let examples = [
         SelectionConsistencyExample(
@@ -148,8 +150,10 @@ private enum MarkedTextRangePolicyCheck {
     ]
 
     static func main() throws {
-        try checkPlainCommitFastPath()
-        try checkActiveMarkedTextRangeReads()
+        try checkBusyPlainCommitFastPath()
+        try checkBusyActiveMarkedTextRangeReads()
+        try checkDefaultReplacementDecisions()
+        try checkDefaultPendingContinuation()
 
         for example in examples {
             let actual = MarkedTextRangePolicy.isSelectionRange(
@@ -162,12 +166,12 @@ private enum MarkedTextRangePolicyCheck {
         }
 
         print(
-            "Marked text range policy check passed \(examples.count) selection examples " +
-                "and 2 replacement-decision examples."
+            "Marked text range policy check passed default and busy profiles, " +
+                "\(examples.count) busy selection examples, and pending continuation."
         )
     }
 
-    private static func checkPlainCommitFastPath() throws {
+    private static func checkBusyPlainCommitFastPath() throws {
         var selectedRangeReadCount = 0
         var markedRangeReadCount = 0
 
@@ -206,7 +210,7 @@ private enum MarkedTextRangePolicyCheck {
         }
     }
 
-    private static func checkActiveMarkedTextRangeReads() throws {
+    private static func checkBusyActiveMarkedTextRangeReads() throws {
         var selectedRangeReadCount = 0
         var markedRangeReadCount = 0
         let selectedRange = NSRange(location: 12, length: 0)
@@ -242,6 +246,172 @@ private enum MarkedTextRangePolicyCheck {
         else {
             throw ReplacementDecisionFailure(
                 description: "active marked text did not preserve the host marked-range decision"
+            )
+        }
+    }
+
+    // swiftlint:disable:next function_body_length
+    private static func checkDefaultReplacementDecisions() throws {
+        var selectedRangeReadCount = 0
+        var markedRangeReadCount = 0
+        let selectedRange = NSRange(location: 12, length: 0)
+        let markedRange = NSRange(location: 10, length: 3)
+
+        func readSelectedRange() -> NSRange {
+            selectedRangeReadCount += 1
+            return selectedRange
+        }
+
+        func readMarkedRange() -> NSRange {
+            markedRangeReadCount += 1
+            return markedRange
+        }
+
+        let plainDecision = DefaultMarkedTextRangePolicy.replacementDecision(
+            hasMarkedText: false,
+            selectedRange: readSelectedRange(),
+            markedRange: readMarkedRange()
+        )
+        guard selectedRangeReadCount == 1, markedRangeReadCount == 1,
+              plainDecision.replacementRange == DefaultMarkedTextRangePolicy.currentSelectionReplacementRange,
+              plainDecision.selectedRange == selectedRange,
+              plainDecision.markedRange == markedRange,
+              plainDecision.reason == .currentSelection
+        else {
+            throw ReplacementDecisionFailure(
+                description: "default plain commit did not preserve v0.1.8 range reads"
+            )
+        }
+
+        let markedDecision = DefaultMarkedTextRangePolicy.replacementDecision(
+            hasMarkedText: true,
+            selectedRange: selectedRange,
+            markedRange: markedRange
+        )
+        guard markedDecision.replacementRange == markedRange,
+              markedDecision.reason == .marked
+        else {
+            throw ReplacementDecisionFailure(
+                description: "default active composition did not use the host marked range"
+            )
+        }
+
+        let invalidMarkedDecision = DefaultMarkedTextRangePolicy.replacementDecision(
+            hasMarkedText: true,
+            selectedRange: selectedRange,
+            markedRange: NSRange(location: NSNotFound, length: 0)
+        )
+        guard invalidMarkedDecision.replacementRange ==
+                DefaultMarkedTextRangePolicy.currentSelectionReplacementRange,
+              invalidMarkedDecision.reason == .currentSelection
+        else {
+            throw ReplacementDecisionFailure(
+                description: "default active composition accepted an invalid host marked range"
+            )
+        }
+
+        guard DefaultMarkedTextRangePolicy.isSelectionRange(
+            NSRange(location: 10, length: 1),
+            consistentWithMarkedRange: markedRange
+        ) else {
+            throw ReplacementDecisionFailure(
+                description: "default diagnostic selection consistency became strict"
+            )
+        }
+        guard DefaultMarkedTextRangePolicy.isSelectionRange(
+            NSRange(location: 11, length: 2),
+            consistentWithMarkedRange: markedRange
+        ) else {
+            throw ReplacementDecisionFailure(
+                description: "default diagnostic no longer accepts a shared range end"
+            )
+        }
+        guard !DefaultMarkedTextRangePolicy.isSelectionRange(
+            NSRange(location: 20, length: 0),
+            consistentWithMarkedRange: markedRange
+        ) else {
+            throw ReplacementDecisionFailure(
+                description: "default diagnostic accepted an unrelated selection"
+            )
+        }
+    }
+
+    // swiftlint:disable:next function_body_length
+    private static func checkDefaultPendingContinuation() throws {
+        var selectedRangeReadCount = 0
+
+        func readSelectedRange() -> NSRange {
+            selectedRangeReadCount += 1
+            return NSRange(location: 88, length: 0)
+        }
+
+        let explicitContinuation = DefaultMarkedTextRangePolicy.continuationRange(
+            afterReplacing: NSRange(location: 10, length: 40),
+            withCommittedText: "😀",
+            selectedRange: readSelectedRange()
+        )
+        guard explicitContinuation == NSRange(location: 12, length: 0),
+              selectedRangeReadCount == 0
+        else {
+            throw ReplacementDecisionFailure(
+                description: "default explicit continuation did not advance from replacement start"
+            )
+        }
+
+        let selectedContinuation = DefaultMarkedTextRangePolicy.continuationRange(
+            afterReplacing: DefaultMarkedTextRangePolicy.currentSelectionReplacementRange,
+            withCommittedText: "가",
+            selectedRange: readSelectedRange()
+        )
+        guard selectedContinuation == NSRange(location: 88, length: 0),
+              selectedRangeReadCount == 1
+        else {
+            throw ReplacementDecisionFailure(
+                description: "default current-selection continuation did not use post-insert selection"
+            )
+        }
+
+        let overflowContinuation = DefaultMarkedTextRangePolicy.continuationRange(
+            afterReplacing: NSRange(location: Int.max, length: 0),
+            withCommittedText: "가",
+            selectedRange: readSelectedRange()
+        )
+        guard overflowContinuation == NSRange(location: 88, length: 0),
+              selectedRangeReadCount == 2
+        else {
+            throw ReplacementDecisionFailure(
+                description: "default overflow continuation did not use post-insert selection"
+            )
+        }
+
+        let invalidContinuation = DefaultMarkedTextRangePolicy.continuationRange(
+            afterReplacing: DefaultMarkedTextRangePolicy.currentSelectionReplacementRange,
+            withCommittedText: "가",
+            selectedRange: NSRange(location: 88, length: 2)
+        )
+        guard invalidContinuation == nil else {
+            throw ReplacementDecisionFailure(
+                description: "default continuation accepted a non-collapsed selection"
+            )
+        }
+
+        let (pendingRange, pendingReason) = DefaultMarkedTextRangePolicy.updateCompositionReplacementDecision(
+            pendingMarkedTextReplacementRange: selectedContinuation
+        )
+        guard pendingRange == selectedContinuation, pendingReason == .markedContinuation else {
+            throw ReplacementDecisionFailure(
+                description: "default pending continuation was not exposed to updateComposition"
+            )
+        }
+
+        let (emptyRange, emptyReason) = DefaultMarkedTextRangePolicy.updateCompositionReplacementDecision(
+            pendingMarkedTextReplacementRange: nil
+        )
+        guard emptyRange == DefaultMarkedTextRangePolicy.currentSelectionReplacementRange,
+              emptyReason == .currentSelection
+        else {
+            throw ReplacementDecisionFailure(
+                description: "default nil continuation did not return the current-selection sentinel"
             )
         }
     }

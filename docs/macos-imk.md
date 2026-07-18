@@ -72,10 +72,13 @@ Do not run the input method directly from Xcode as the primary test path. Build
 it, install it into `~/Library/Input Methods`, then select it as an input source
 in System Settings.
 
-For InputMethodKit, mode switching, modifier handling, shortcut forwarding, or
-bundled CLI behavior changes, run
+For bundled CLI behavior changes, run
+`nix develop --command -- make hisle-cli-check`; also run
+`nix develop --command -- make frontmost-monitor-check` when monitor behavior
+changes. For InputMethodKit, mode switching, modifier handling, shortcut
+forwarding, or CLI mode integration, run
 `nix develop --command -- make gui-smoke-test` when the local GUI prerequisites
-are available. The GUI smoke test details live in `docs/testing.md`.
+are available. The check details live in `docs/testing.md`.
 
 ## Companion CLI
 
@@ -89,20 +92,39 @@ Without options it prints `roman` or `hangul`; `--version` prints both the app
 version and `hisle-core` version. Debug CLI builds append `-debug` to the
 displayed app version.
 
-When changing `hisle-cli`, update this Companion CLI section and the GUI smoke
-test expectations if the command-line contract changes. The bundled helper's
-no-option output is part of the smoke test.
+`hisle init` creates the resolved `busy-apps.txt` and any missing parent
+directories, then prints the path. It uses the same XDG/HOME precedence as the
+app, is safe to repeat, and never truncates an existing file. App startup
+remains read-only and does not create a missing configuration file. An existing
+`busy-apps.txt` may be a symbolic link when it resolves to a regular file;
+directories, other non-regular targets, and broken links are rejected.
+
+`hisle frontmost` prints the current frontmost app's bundle identifier
+immediately, then prints one unadorned line whenever the identifier changes.
+It suppresses consecutive duplicate identifiers. If an app has no bundle
+identifier, the helper reports that fact on stderr and continues monitoring.
+The no-option and `--version` contracts are unchanged.
+
+When changing `hisle-cli`, update this Companion CLI section and the relevant
+CLI, frontmost-monitor, and GUI smoke expectations. The bundled helper's
+no-option output is part of both the CLI and GUI checks.
 
 ## Logging
 
+At startup, all builds log the resolved `busy-apps.txt` path and snapshot entry
+count before starting the IMK server. A missing, unreadable, or invalid UTF-8
+file produces an empty snapshot and an error notice containing the read cause.
+
 All builds emit `controller runtime` lifecycle notices when an input method
 controller is initialized or activated. Each notice includes `stage`,
-`buildProfile`, `appVersion`, `coreVersion`, `build`, `pid`, `bundle`, and
-`replacementPolicy` so Debug and Release binaries can be matched to the
+`buildProfile`, `appVersion`, `coreVersion`, `build`, `pid`, `bundle`,
+`clientBundleIdentifier`, `profile`, and `replacementPolicy` so Debug and
+Release binaries, client identity, and selected backend can be matched to the
 installed app and core library being tested, even when a manual `log stream`
-starts after the process was launched. The `buildProfile` field is `debug` or
-`release`; the `build` field comes from `CFBundleVersion`, which is owned by
-`CURRENT_PROJECT_VERSION`.
+starts after the process was launched. The `profile` field is `default` or
+`busy`; an unidentified client is logged as `unknown` and uses `default`. The
+`buildProfile` field is `debug` or `release`; the `build` field comes from
+`CFBundleVersion`, which is owned by `CURRENT_PROJECT_VERSION`.
 
 Debug builds can opt into noisy IMK client range traces with the
 `traceClientRanges` defaults key or `HISLE_TRACE_CLIENT_RANGES=1`; see
@@ -111,7 +133,66 @@ Debug builds can opt into noisy IMK client range traces with the
 Release builds must not emit these traces. Keep any Release logging limited to
 sparse lifecycle or unexpected fallback events.
 
-## Marked Text Range Policy
+## App-Specific Host Backends
+
+`InputMethodRuntime` loads one immutable `BusyAppsSnapshot`, constructs one
+`HostBackendFactory` from it, and only then starts `InputMethodServer` lazily.
+There is no mutable server-global snapshot or required assignment order.
+`AppDelegate` logs the runtime-owned snapshot before requesting the server.
+
+The factory reads a client's initial `IMKTextInput.bundleIdentifier()` without
+normalization and selects `busy` only for an exact, case-sensitive snapshot
+member; every other client selects `default`. Selection and construction stay
+in the factory, and the selected backend is fixed for the controller lifetime.
+The factory accepts an injected builder so selection and test doubles can be
+checked without constructing an `InputController`.
+
+`InputController` owns only the IMK overrides and implements the narrow
+`HostBackendContext` adapter used for logging, input-mode state, the current
+host client, and the one required `super.updateComposition()` call. Its lazy,
+non-optional `HostBackendDispatcher` routes activation, deactivation, close,
+`setValue`, mouse and key events, external commit/cancel, composition updates,
+and replacement-range callbacks. The dispatcher and backend state depend on
+the context protocol rather than referencing `InputController` directly.
+
+Common activation and input flow lives in one `HostBackendImplementation`
+implementation: lifecycle ordering, key classification, Shift mode selection,
+mode boundaries, host forwarding, Backspace, Roman input, and Roman fallback
+must not be duplicated by profiles. Each backend instance still owns its own
+Cole Sebeol engine and marked state. `DefaultHostBackend` additionally owns only
+the v0.1.8 single pending marked-text continuation. `BusyHostBackend` owns the
+marked-range tracker, deferred queue, editing-context generation, tickets, and
+in-flight commit, aggregate, and continuation state. Do not move pending or
+deferred state onto `InputController` or share it across backend instances.
+
+Represent host compatibility as independently named configuration axes:
+reported versus owned marked ranges, synchronous versus deferred boundary
+delivery, scalar versus aggregate fallback, and lifecycle capabilities. The
+current `default` and `busy` profiles are approved compositions of these axes;
+profile-specific code should implement only the composition compatibility that
+cannot use the shared flow. This keeps a new compatibility requirement from
+forcing another copy of key, mode, Roman, and lifecycle handling.
+
+Run `nix develop --command -- make host-backend-contract-check` after changing
+backend selection, compatibility composition, callback routing, or lifecycle
+ordering. The deterministic check is described in `docs/testing.md`.
+
+### Default Marked Text Policy
+
+`default` restores the complete v0.1.8 host-integration behavior. It queries
+the client selected and marked ranges for each commit, replaces a valid host
+marked range only while local marked text is active, and otherwise uses
+`NSRange(location: NSNotFound, length: 0)`. A commit followed by new marked text
+uses one pending continuation range for that immediate `updateComposition`
+callback only.
+
+`FlushThenEmit` output, including active Hangul composition plus whitespace, is
+inserted synchronously as the engine's full committed string in one host call.
+Hangul fallback text is processed and applied scalar by scalar. Default has no
+owned-range tracker, deferred queue, generation, ticket, aggregate transaction,
+or close-time flush beyond the v0.1.8 lifecycle.
+
+### Busy Marked Text Range Policy
 
 For ordinary current-selection insertion, use
 `NSRange(location: NSNotFound, length: 0)` instead of converting
@@ -177,9 +258,9 @@ and marked-range phases exactly once. Deferred delivery must not clear newer
 marked text, reinterpret the continuation through a later shared input mode, or
 reroute the boundary to a different client.
 
-Keep this policy app-agnostic. Do not add Confluence, Chromium, or editor-name
-branches unless a later bug proves that a general IMK range policy is
-insufficient.
+Keep each backend internally app-agnostic. App identity selects the backend
+only through the external exact-match snapshot; do not add Confluence,
+Chromium, Teams, or editor-name branches or built-in identifiers.
 
 ## References
 
