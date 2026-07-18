@@ -1,2 +1,2 @@
 # Do not modify
-{version="0.1.16";dmgHash="sha256-DRytLcujiZF/j8o/bqaiLo8n4/bkrQ6dj9VkZSArNbY=";}
+{version="0.1.18";dmgHash="sha256-lsIADMNwbjWkyqVXYpztOvBP+67Ykgw/P6IURBA/a2M=";}
