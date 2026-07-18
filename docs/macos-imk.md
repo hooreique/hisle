@@ -135,25 +135,47 @@ sparse lifecycle or unexpected fallback events.
 
 ## App-Specific Host Backends
 
-`AppDelegate` loads one immutable `BusyAppsSnapshot` before
-`InputMethodServer` starts. A controller reads its initial
-`IMKTextInput.bundleIdentifier()` without normalization and selects `busy` only
-for an exact, case-sensitive snapshot member; every other client selects
-`default`. The selected backend is fixed for the controller lifetime.
+`InputMethodRuntime` loads one immutable `BusyAppsSnapshot`, constructs one
+`HostBackendFactory` from it, and only then starts `InputMethodServer` lazily.
+There is no mutable server-global snapshot or required assignment order.
+`AppDelegate` logs the runtime-owned snapshot before requesting the server.
 
-`InputController` owns only the IMK overrides and routes activation,
-deactivation, close, `setValue`, mouse and key events, mode boundaries,
-forwarding, Backspace, engine output application, Roman commits, fallback,
-external commit/cancel, composition updates, replacement-range callbacks, and
-deferred callbacks to that one backend.
+The factory reads a client's initial `IMKTextInput.bundleIdentifier()` without
+normalization and selects `busy` only for an exact, case-sensitive snapshot
+member; every other client selects `default`. Selection and construction stay
+in the factory, and the selected backend is fixed for the controller lifetime.
+The factory accepts an injected builder so selection and test doubles can be
+checked without constructing an `InputController`.
 
-Both backends share the Cole Sebeol engine type, key classifier, Shift detector,
-and input-mode policy, but each backend instance owns its own engine and marked
-state. `DefaultHostBackend` additionally owns only the v0.1.8 single pending
-marked-text continuation. `BusyHostBackend` owns the marked-range tracker,
-deferred queue, editing-context generation, tickets, and in-flight commit,
-aggregate, and continuation state. Do not move pending or deferred state back
-onto `InputController` or share it across the backends.
+`InputController` owns only the IMK overrides and implements the narrow
+`HostBackendContext` adapter used for logging, input-mode state, the current
+host client, and the one required `super.updateComposition()` call. Its lazy,
+non-optional `HostBackendDispatcher` routes activation, deactivation, close,
+`setValue`, mouse and key events, external commit/cancel, composition updates,
+and replacement-range callbacks. The dispatcher and backend state depend on
+the context protocol rather than referencing `InputController` directly.
+
+Common activation and input flow lives in one `HostBackendImplementation`
+implementation: lifecycle ordering, key classification, Shift mode selection,
+mode boundaries, host forwarding, Backspace, Roman input, and Roman fallback
+must not be duplicated by profiles. Each backend instance still owns its own
+Cole Sebeol engine and marked state. `DefaultHostBackend` additionally owns only
+the v0.1.8 single pending marked-text continuation. `BusyHostBackend` owns the
+marked-range tracker, deferred queue, editing-context generation, tickets, and
+in-flight commit, aggregate, and continuation state. Do not move pending or
+deferred state onto `InputController` or share it across backend instances.
+
+Represent host compatibility as independently named configuration axes:
+reported versus owned marked ranges, synchronous versus deferred boundary
+delivery, scalar versus aggregate fallback, and lifecycle capabilities. The
+current `default` and `busy` profiles are approved compositions of these axes;
+profile-specific code should implement only the composition compatibility that
+cannot use the shared flow. This keeps a new compatibility requirement from
+forcing another copy of key, mode, Roman, and lifecycle handling.
+
+Run `nix develop --command -- make host-backend-contract-check` after changing
+backend selection, compatibility composition, callback routing, or lifecycle
+ordering. The deterministic check is described in `docs/testing.md`.
 
 ### Default Marked Text Policy
 

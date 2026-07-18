@@ -127,10 +127,10 @@ extension BusyHostBackend {
             contextGeneration: contextGeneration,
             expectedInsertionRange: markedTextRangeTracker.insertionRange,
             continuationScalars: continuationScalars
-        ) { [self, inputController = inputController] ticket in
-            // v0.1.15 captured InputController directly; preserve that lifetime
-            // while the selected backend owns the deferred callback.
-            withExtendedLifetime(inputController) {
+        ) { [self, context] ticket in
+            // Preserve the production host context while the selected backend
+            // owns a deferred callback without coupling it to InputController.
+            withExtendedLifetime(context) {
                 resolveScheduledBoundaryText(ticket)
             }
         }

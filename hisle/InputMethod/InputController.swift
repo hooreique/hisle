@@ -3,7 +3,7 @@ import InputMethodKit
 import os
 
 @objc(HisleInputController)
-final class InputController: IMKInputController {
+final class InputController: IMKInputController, HostBackendContext {
     let logger = Logger(subsystem: "hooreique.inputmethod.hisle", category: "InputController")
     private static var sharedInputMode = HisleInputMode.roman {
         didSet {
@@ -15,7 +15,10 @@ final class InputController: IMKInputController {
 #else
     static let buildProfile = "release"
 #endif
-    private var hostBackend: (any HostBackend)!
+    private lazy var hostBackend = InputMethodRuntime.shared.hostBackendFactory.makeDispatcher(
+        for: clientBundleIdentifier,
+        context: self
+    )
     private(set) var clientBundleIdentifier: String?
 
     var inputMode: HisleInputMode {
@@ -28,12 +31,7 @@ final class InputController: IMKInputController {
         super.init(server: server, delegate: delegate, client: inputClient)
 
         clientBundleIdentifier = bundleIdentifier
-        switch InputMethodServer.busyAppsSnapshot.profile(for: bundleIdentifier) {
-        case .busy:
-            hostBackend = BusyHostBackend(inputController: self)
-        case .defaultProfile:
-            hostBackend = DefaultHostBackend(inputController: self)
-        }
+        _ = hostBackend
 
         HisleInputModeState.write(inputMode)
         logRuntimeIdentity(stage: "initialized")

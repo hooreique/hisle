@@ -22,6 +22,24 @@ bytes and permissions across repeated runs, accepts a symbolic link that
 resolves to a regular file, and rejects paths that resolve to directories or
 other non-regular files.
 
+## Host Backend Contract Check
+
+Run the deterministic backend contract check after changing backend selection,
+construction, callback routing, compatibility configuration, or lifecycle
+ordering:
+
+```sh
+nix develop --command -- make host-backend-contract-check
+```
+
+The check compiles the production immutable snapshot, backend factory,
+compatibility axes, lifecycle plans, and callback dispatcher with injected host
+context and backend test doubles. It verifies exact case-sensitive `busy`
+selection and default fallback, one backend construction per request,
+independent range/boundary/fallback composition, every dispatched callback's
+arguments and return value, and the ordered activation, deactivation, close,
+and mouse-boundary operations for both profiles.
+
 ## Companion CLI Check
 
 Run the built-helper check after changing `hisle init` or the existing mode,

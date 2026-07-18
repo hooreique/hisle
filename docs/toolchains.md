@@ -56,6 +56,13 @@ Run the deterministic busy-app snapshot and configuration initializer check:
 nix develop --command -- make busy-apps-configuration-check
 ```
 
+Run the deterministic host-backend selection, routing, and lifecycle contract
+check:
+
+```sh
+nix develop --command -- make host-backend-contract-check
+```
+
 Build and run the bundled companion CLI contract check:
 
 ```sh

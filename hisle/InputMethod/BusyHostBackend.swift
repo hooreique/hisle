@@ -1,111 +1,35 @@
-import Cocoa
-import HisleCore
+import Foundation
 import InputMethodKit
 import os
 
 extension BusyHostBackend {
-    func activateServer(_ sender: Any?) {
+    func drainPendingInput() {
         drainDeferredBoundaryText()
+    }
+
+    func activateEditingContext() {
         deferredBoundaryContext.activate()
-        KeyboardLayoutOverride.installColemak(
-            for: sender ?? inputController.hostClient(),
-            logSuccess: true
-        )
     }
 
-    func deactivateServer(_ sender: Any?) {
-        drainDeferredBoundaryText()
-        flushBeforeForwarding(to: sender)
-        markedTextRangeTracker.clear()
-        deferredBoundaryContext.deactivate()
-        shiftTap = ShiftTapDetector()
-    }
-
-    func inputControllerWillClose() {
-        drainDeferredBoundaryText()
-        flushBeforeForwarding(to: inputController.hostClient())
-        markedTextRangeTracker.clear()
+    func deactivateEditingContext() {
         deferredBoundaryContext.deactivate()
     }
 
-    func setValue(_ value: Any?, forTag tag: Int, client sender: Any?) {
-        drainDeferredBoundaryText()
-        KeyboardLayoutOverride.installColemak(for: sender, logSuccess: true)
-
-        if tag == kTextServiceInputModePropertyTag {
-            selectRomanModeForInputSourceSelection(client: sender)
-        }
-    }
-
-    func mouseDown(client sender: Any) -> Bool {
-        drainDeferredBoundaryText()
-        flushBeforeForwarding(to: sender)
-        markedTextRangeTracker.clear()
+    func advanceEditingContext() {
         deferredBoundaryContext.advanceEditingContext()
-        return false
     }
 
-    func handle(_ event: NSEvent, client sender: Any) -> Bool {
-        drainDeferredBoundaryText()
-        KeyboardLayoutOverride.installColemak(for: sender)
+    func clearOwnedRanges() {
+        markedTextRangeTracker.clear()
+    }
 
-        if event.type == .leftMouseDown || event.type == .rightMouseDown || event.type == .otherMouseDown {
-            flushBeforeForwarding(to: sender)
-            markedTextRangeTracker.clear()
-            deferredBoundaryContext.advanceEditingContext()
-            return false
-        }
-
-        if event.type == .flagsChanged {
-            let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+    func traceBeforeKeyInput(keyCode _: UInt16, client: IMKTextInput?) {
 #if DEBUG
-            NSLog("hisle flagsChanged keyCode=\(event.keyCode) modifiers=\(modifiers.rawValue)")
-            let flagsChangedMessage = "flagsChanged keyCode=\(event.keyCode) modifiers=\(modifiers.rawValue)"
-            logger.debug("\(flagsChangedMessage, privacy: .public)")
-#endif
-
-            guard let selectedMode = shiftTap.handleFlagsChanged(
-                keyCode: event.keyCode,
-                modifiers: modifiers
-            ) else {
-                return false
-            }
-            return selectInputMode(selectedMode, client: sender)
-        }
-
-        guard event.type == .keyDown else {
-            return false
-        }
-
-        let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-#if DEBUG
-        let textLength = event.characters?.utf16.count ?? 0
-        NSLog("hisle handle keyCode=\(event.keyCode) modifiers=\(modifiers.rawValue) textLength=\(textLength)")
-        let handleMessage = "handle keyCode=\(event.keyCode) modifiers=\(modifiers.rawValue) " +
-            "textLength=\(textLength)"
-        logger.debug("\(handleMessage, privacy: .public)")
-#endif
-
-        return handleKeyInput(
-            text: event.characters,
-            keyCode: event.keyCode,
-            modifiers: modifiers,
-            client: sender
+        ClientRangeTracer(logger: logger).logInconsistentMarkedRangeIfNeeded(
+            client: client,
+            markedText: markedText
         )
-    }
-
-    func commitComposition(_ sender: Any?) {
-        drainDeferredBoundaryText()
-        _ = apply(hangulEngine.process(.flush), to: sender)
-        markedTextRangeTracker.clear()
-        deferredBoundaryContext.advanceEditingContext()
-    }
-
-    func cancelComposition() {
-        drainDeferredBoundaryText()
-        _ = apply(hangulEngine.process(.clear), to: inputController.hostClient())
-        markedTextRangeTracker.clear()
-        deferredBoundaryContext.advanceEditingContext()
+#endif
     }
 
     func updateComposition() {

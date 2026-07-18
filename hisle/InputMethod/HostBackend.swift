@@ -3,63 +3,63 @@ import HisleCore
 import InputMethodKit
 import os
 
-protocol HostBackend: AnyObject {
-    var profile: HostProfile { get }
-    var replacementPolicyID: String { get }
-    var markedText: MarkedTextState { get }
-
-    func activateServer(_ sender: Any?)
-    func deactivateServer(_ sender: Any?)
-    func inputControllerWillClose()
-    func setValue(_ value: Any?, forTag tag: Int, client sender: Any?)
-    func mouseDown(client sender: Any) -> Bool
-    func handle(_ event: NSEvent, client sender: Any) -> Bool
-    func commitComposition(_ sender: Any?)
-    func cancelComposition()
-    func updateComposition()
-    func replacementRange() -> NSRange
-}
-
 class HostBackendState {
-    unowned let inputController: InputController
-    var hangulEngine = InputController.makeEngine()
+    unowned let context: any HostBackendContext
+    var hangulEngine = HostBackendState.makeEngine()
     var markedText = MarkedTextState()
     var shiftTap = ShiftTapDetector()
     let keyClassifier = InputKeyClassifier()
 
-    init(inputController: InputController) {
-        self.inputController = inputController
+    init(context: any HostBackendContext) {
+        self.context = context
     }
 
     var logger: Logger {
-        inputController.logger
+        context.logger
     }
 
     var inputMode: HisleInputMode {
-        get { inputController.inputMode }
-        set { inputController.inputMode = newValue }
+        get { context.inputMode }
+        set { context.inputMode = newValue }
     }
 
     func textClient(from sender: Any?) -> IMKTextInput? {
         if let client = sender as? IMKTextInput {
             return client
         }
-        return inputController.hostClient()
+        return context.hostClient()
     }
 
     func performHostCompositionUpdate() {
-        inputController.performHostCompositionUpdate()
+        context.performHostCompositionUpdate()
+    }
+
+    private static func makeEngine() -> ColeSebeolEngine {
+        do {
+            return try ColeSebeolEngine()
+        } catch {
+            fatalError("Failed to initialize ColeSebeolEngine: \(error)")
+        }
     }
 }
 
-final class DefaultHostBackend: HostBackendState, HostBackend {
-    let profile = HostProfile.defaultProfile
+final class DefaultHostBackend: HostBackendState, HostBackendImplementation {
+    let compatibility: HostBackendCompatibility
     let replacementPolicyID = DefaultMarkedTextRangePolicy.policyID
     var pendingMarkedTextReplacementRange: NSRange?
+
+    init(compatibility: HostBackendCompatibility, context: any HostBackendContext) {
+        self.compatibility = compatibility
+        super.init(context: context)
+    }
+
+    var profile: HostProfile {
+        compatibility.profile
+    }
 }
 
-final class BusyHostBackend: HostBackendState, HostBackend {
-    let profile = HostProfile.busy
+final class BusyHostBackend: HostBackendState, HostBackendImplementation {
+    let compatibility: HostBackendCompatibility
     let replacementPolicyID = MarkedTextRangePolicy.policyID
     var markedTextRangeTracker = MarkedTextRangeTracker()
     var deferredBoundaryQueue = DeferredBoundaryQueue()
@@ -69,4 +69,32 @@ final class BusyHostBackend: HostBackendState, HostBackend {
     var inFlightDeferredBoundaryContinuation: DeferredBoundaryContinuation?
     var pendingMarkedTextReplacement: PendingMarkedTextReplacement?
     var lastUpdateCompositionReplacementRange: NSRange?
+
+    init(compatibility: HostBackendCompatibility, context: any HostBackendContext) {
+        self.compatibility = compatibility
+        super.init(context: context)
+    }
+
+    var profile: HostProfile {
+        compatibility.profile
+    }
+}
+
+extension HostBackendFactory {
+    init(busyAppsSnapshot: BusyAppsSnapshot) {
+        self.init(busyAppsSnapshot: busyAppsSnapshot) { compatibility, context in
+            switch (
+                compatibility.markedTextRanges,
+                compatibility.boundaryDelivery,
+                compatibility.fallback
+            ) {
+            case (.hostReported, .synchronous, .scalar):
+                return DefaultHostBackend(compatibility: compatibility, context: context)
+            case (.owned, .deferred, .aggregate):
+                return BusyHostBackend(compatibility: compatibility, context: context)
+            default:
+                fatalError("Unsupported host compatibility composition")
+            }
+        }
+    }
 }

@@ -20,7 +20,7 @@ BROWSER_OBSERVER_DIR ?= tools/chrome-ime
 XCODEBUILD_ENV := env -u CC -u CXX -u LD -u SDKROOT -u NIX_CC -u NIX_CFLAGS_COMPILE -u NIX_CFLAGS_LINK -u NIX_LDFLAGS
 XCODEBUILD := $(XCODEBUILD_ENV) /usr/bin/xcodebuild
 
-.PHONY: all help require-nix-shell require-app-shell require-default-shell require-core-shell require-browser-shell require-icon-shell build dmg install-debug uninstall clean icons check-toolchain version-check swiftlint busy-apps-configuration-check hisle-cli-check marked-range-policy-check deferred-boundary-check frontmost-monitor-check browser-observer-check core-spec-check gui-smoke-test chrome-ime-repro firefox-ime-repro atlassian-confluence-login atlassian-confluence-repro
+.PHONY: all help require-nix-shell require-app-shell require-default-shell require-core-shell require-browser-shell require-icon-shell build dmg install-debug uninstall clean icons check-toolchain version-check swiftlint busy-apps-configuration-check host-backend-contract-check hisle-cli-check marked-range-policy-check deferred-boundary-check frontmost-monitor-check browser-observer-check core-spec-check gui-smoke-test chrome-ime-repro firefox-ime-repro atlassian-confluence-login atlassian-confluence-repro
 
 all: help
 
@@ -35,6 +35,7 @@ help:
 	@echo '    nix develop --command -- make version-check'
 	@echo '    nix develop --command -- make swiftlint'
 	@echo '    nix develop --command -- make busy-apps-configuration-check'
+	@echo '    nix develop --command -- make host-backend-contract-check'
 	@echo '    nix develop --command -- make hisle-cli-check'
 	@echo '    nix develop --command -- make marked-range-policy-check'
 	@echo '    nix develop --command -- make deferred-boundary-check'
@@ -118,6 +119,9 @@ swiftlint: require-app-shell
 
 busy-apps-configuration-check: require-default-shell
 	$(NU) tools/busy_apps_configuration_check.nu
+
+host-backend-contract-check: require-default-shell
+	$(NU) tools/host_backend_contract_check.nu
 
 hisle-cli-check: require-default-shell build
 	CONFIGURATION='$(CONFIGURATION)' \
